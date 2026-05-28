@@ -1,5 +1,23 @@
 # MultiChat AI - CRM Unificado com Super Agente IA
 
+## Status do Projeto
+
+### ✅ Concluído
+- [x] Deploy Vercel (https://bob-chatia.vercel.app)
+- [x] Supabase (15 tabelas, RLS, pgvector)
+- [x] Auth (admin: cortescqsabi@gmail.com)
+- [x] WhatsApp via Evolution API
+- [x] AI Chat com RAG (OpenAI + embeddings)
+- [x] Base de Conhecimento (4 templates .MD processados)
+- [x] GitHub (https://github.com/cortescqsabi-lgtm/bob-chatia)
+
+### ❌ Pendente
+- [ ] Meta Graph API (Instagram/Facebook) — precisa criar Business Portfolio
+- [ ] Stripe (pagamentos e assinaturas)
+- [ ] Domínio customizado na Vercel
+
+---
+
 ## 🚀 Visão Geral
 
 **MultiChat AI** é uma plataforma SaaS multi-tenant que conecta WhatsApp, Instagram e Facebook em um único painel inteligente, impulsionado por um **Super Agente de IA** treinável personalizado para cada cliente.
