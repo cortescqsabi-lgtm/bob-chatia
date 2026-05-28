@@ -6,6 +6,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 interface Tag { id: string; name: string; color: string; }
 interface Conversation { id: string; channel_identifier: string; contact_name: string | null; last_message_at: string; status: string; channel_type: string; profile_pic_url?: string; }
 interface Message { id: string; content: string; role: string; created_at: string; direction?: string; type?: string; status?: string; }
+interface Contact { id: string; name: string; phone: string; email?: string|null; avatar_url?: string|null; channel_type: string; notes?: string|null; created_at: string; }
 
 /* ─── SVG Icons ─── */
 const S: Record<string,string> = {
@@ -94,6 +95,14 @@ export default function CrmPage() {
   const [recordingSec, setRecordingSec] = useState(0);
   const [previewUrl, setPreviewUrl] = useState<string|null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [contactSearch, setContactSearch] = useState('');
+  const [contactModal, setContactModal] = useState(false);
+  const [editContact, setEditContact] = useState<Contact|null>(null);
+  const [cName, setCName] = useState('');
+  const [cPhone, setCPhone] = useState('');
+  const [cEmail, setCEmail] = useState('');
+  const [cType, setCType] = useState('whatsapp');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder|null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -242,6 +251,32 @@ export default function CrmPage() {
     await fetch('/api/tags',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'unassign',conversation_id:convId,tag_id:tagId})});
     loadAllConvTags();
   };
+
+  const loadContacts = useCallback(async () => {
+    try { const r=await fetch('/api/crm/contacts?limit=200'); const d=await r.json(); setContacts(d.data||[]); } catch { setContacts([]); }
+  }, []);
+
+  const handleSaveContact = async () => {
+    if(!cName.trim()||!cPhone.trim())return;
+    if(editContact) {
+      await fetch('/api/crm/contacts',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:editContact.id,name:cName,phone:cPhone,email:cEmail||null,channel_type:cType})});
+    } else {
+      await fetch('/api/crm/contacts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:cName,phone:cPhone,email:cEmail||null,channel_type:cType})});
+    }
+    setContactModal(false); setEditContact(null); setCName(''); setCPhone(''); setCEmail(''); setCType('whatsapp'); loadContacts();
+  };
+
+  const handleDeleteContact = async (id: string) => {
+    await fetch('/api/crm/contacts?id='+id,{method:'DELETE'}); loadContacts();
+  };
+
+  const startContactConv = async (name: string, phone: string) => {
+    const r = await fetch('/api/crm/conversations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({channel_identifier:phone.replace(/\D/g,''),contact_name:name,channel_type:'whatsapp'})});
+    const d = await r.json();
+    if (d.data) { setMenu('atendimento'); setSel(d.data); loadMsgs(d.data.id); setMobile(false); }
+  };
+
+  useEffect(() => { loadContacts(); }, [loadContacts]);
 
   const [dragId, setDragId] = useState<string|null>(null);
   const [popupConv, setPopupConv] = useState<Conversation|null>(null);
@@ -629,8 +664,104 @@ export default function CrmPage() {
           </div>
         )}
 
+        {/* ═══ CONTATOS ═══ */}
+        {menu === 'contatos' && (
+          <div className="flex-1 flex overflow-hidden">
+            <div className="w-80 bg-white border-r border-gray-100 flex-shrink-0 flex flex-col">
+              <div className="px-5 py-4 border-b border-gray-100">
+                <div className="flex items-center justify-between mb-3">
+                  <h1 className="text-lg font-bold text-gray-800">Contatos</h1>
+                  <button onClick={()=>{setEditContact(null);setCName('');setCPhone('');setCEmail('');setCType('whatsapp');setContactModal(true)}}
+                    className="flex items-center gap-1 text-sm font-semibold bg-[#0084c7] text-white px-3 py-1.5 rounded-lg hover:bg-[#0070b0] transition">
+                    <Icon n="plus" s={15}/> Novo
+                  </button>
+                </div>
+                <div className="relative">
+                  <Icon n="search" s={15} c="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
+                  <input type="text" placeholder="Pesquisar contato..." value={contactSearch} onChange={e=>setContactSearch(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-gray-50 rounded-lg text-sm border-none outline-none focus:ring-2 focus:ring-[#0084c7]/20 placeholder:text-gray-300" />
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                {contacts.filter(c => {const q=contactSearch.toLowerCase();return!q||c.name.toLowerCase().includes(q)||c.phone.includes(q)||(c.email||'').toLowerCase().includes(q);}).map(c => (
+                  <div key={c.id} className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-50" onClick={()=>{setCName(c.name);setCPhone(c.phone);setCEmail(c.email||'');setCType(c.channel_type);setEditContact(c);setContactModal(true)}}>
+                    <Avatar name={c.name} url={c.avatar_url} size={10} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-800 truncate">{c.name}</p>
+                      <p className="text-xs text-gray-400">{c.phone}</p>
+                    </div>
+                    <span className={'text-[10px] font-medium px-2 py-0.5 rounded-full '+(c.channel_type==='whatsapp'?'bg-green-100 text-green-700':'bg-blue-100 text-blue-700')}>{c.channel_type}</span>
+                  </div>
+                ))}
+                {contacts.length === 0 && <div className="text-center text-gray-400 py-12 text-sm">Nenhum contato ainda</div>}
+              </div>
+            </div>
+            <div className="flex-1 flex items-center justify-center bg-gray-50">
+              <div className="text-center max-w-sm">
+                <div className="w-20 h-20 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-6"><Icon n="contatos" s={36} c="text-gray-400"/></div>
+                <h2 className="text-xl font-semibold text-gray-700 mb-2">Selecione um contato</h2>
+                <p className="text-sm text-gray-400">Clique em um contato ao lado para ver detalhes ou editar</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══ CONTACT MODAL ═══ */}
+        {contactModal && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={()=>setContactModal(false)}>
+            <div className="bg-white rounded-xl p-6 w-full max-w-sm mx-4 shadow-xl" onClick={e=>e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-lg">{editContact?'Editar Contato':'Novo Contato'}</h3>
+                <button onClick={()=>setContactModal(false)}><Icon n="x" s={20} c="text-gray-400 hover:text-gray-600"/></button>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-xs font-medium text-gray-500 mb-1 block">Nome</label>
+                  <input type="text" value={cName} onChange={e=>setCName(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#0084c7]/20" placeholder="Nome do contato" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500 mb-1 block">Telefone</label>
+                  <input type="text" value={cPhone} onChange={e=>setCPhone(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#0084c7]/20" placeholder="+5565992774293" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500 mb-1 block">Email</label>
+                  <input type="email" value={cEmail} onChange={e=>setCEmail(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#0084c7]/20" placeholder="email@exemplo.com" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500 mb-1 block">Canal</label>
+                  <select value={cType} onChange={e=>setCType(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#0084c7]/20 bg-white">
+                    <option value="whatsapp">WhatsApp</option>
+                    <option value="instagram">Instagram</option>
+                    <option value="facebook">Facebook</option>
+                  </select>
+                </div>
+              </div>
+              {editContact && (
+                <div className="flex gap-2 mt-4">
+                  <button onClick={()=>startContactConv(editContact.name, editContact.phone)}
+                    className="flex-1 border border-[#0084c7] text-[#0084c7] rounded-lg py-2 text-sm font-medium hover:bg-blue-50 transition">
+                    Iniciar Conversa
+                  </button>
+                  <button onClick={()=>{if(confirm('Excluir este contato?')){handleDeleteContact(editContact.id);}}}
+                    className="flex items-center justify-center w-10 h-10 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 border border-red-200">
+                    <Icon n="trash" s={16}/>
+                  </button>
+                </div>
+              )}
+              <div className="flex gap-2 mt-4">
+                <button onClick={()=>setContactModal(false)} className="flex-1 border border-gray-200 rounded-lg py-2 text-sm font-medium text-gray-600 hover:bg-gray-50">Cancelar</button>
+                <button onClick={handleSaveContact} className="flex-1 bg-[#0084c7] text-white rounded-lg py-2 text-sm font-medium hover:bg-[#0070b0]">{editContact?'Salvar':'Criar'}</button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ═══ Placeholder views ═══ */}
-        {['tarefas','respostas','contatos','agendamentos','chat','resultados','ajuda'].includes(menu) && (
+        {['tarefas','respostas','agendamentos','chat','resultados','ajuda'].includes(menu) && (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center text-gray-400">
               <Icon n={menu} s={48} c="mx-auto mb-4 text-gray-300" />
