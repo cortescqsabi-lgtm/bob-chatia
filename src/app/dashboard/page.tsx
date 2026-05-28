@@ -32,6 +32,7 @@ const S: Record<string,string> = {
   back:'<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
   filter:'<line x1="4" y1="6" x2="20" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/>',
   plus:'<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+  microphone:'<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>',
   x:'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
   edit:'<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
   trash:'<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
@@ -85,7 +86,48 @@ export default function CrmPage() {
   const [tagColor, setTagColor] = useState('#6366f1');
   const [showTagPicker, setShowTagPicker] = useState<string|null>(null);
   const [uploading, setUploading] = useState(false);
+  const [showEmoji, setShowEmoji] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder|null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const emojiRef = useRef<HTMLDivElement>(null);
+
+  const EMOJIS = ['😀','😁','😂','🤣','😃','😄','😅','😆','😉','😊','😋','😎','😍','🥰','😘','😗','😙','😚','🙂','🤗','🤩','🤔','🤨','😐','😑','😶','🙄','😏','😣','😥','😮','🤐','😯','😪','😫','😴','😌','😛','😜','😝','🤤','😒','😓','😔','😕','🙃','🤑','😲','☹️','🙁','😖','😞','😟','😤','😢','😭','😦','😧','😨','😩','🤯','😬','😰','😱','🥵','🥶','😳','🤪','😵','😡','😠','🤬','👍','👎','👊','✊','🤛','🤜','👏','🙌','👐','🤲','🤝','🙏','✌️','🤞','🤟','🤘','👌','❤️','🧡','💛','💚','💙','💜','🖤','💔','💕','💞','💗','💖','✨','🔥','⭐','🌟','💯','✅','❌','❓','❗','🎉','🎊'];
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      audioChunksRef.current = [];
+      recorder.ondataavailable = e => audioChunksRef.current.push(e.data);
+      recorder.onstop = async () => {
+        const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const fd = new FormData();
+        fd.append('file', blob, 'recording_'+Date.now()+'.webm');
+        const r = await fetch('/api/media/upload', { method: 'POST', body: fd });
+        const j = await r.json();
+        if (j.success && sel) {
+          setMsgs(p=>[...p,{id:'sending',content:j.url,role:'assistant',created_at:new Date().toISOString(),direction:'outgoing',type:'audio'}]);
+          await fetch('/api/crm/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({conversation_id:sel.id,content:'',type:'audio',media_url:j.url})});
+          loadMsgs(sel.id);
+        }
+        stream.getTracks().forEach(t => t.stop());
+        setIsRecording(false);
+      };
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+      setIsRecording(true);
+    } catch (e) { console.error('Recording error:', e); }
+  };
+
+  const stopRecording = () => { mediaRecorderRef.current?.stop(); };
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => { if (emojiRef.current && !emojiRef.current.contains(e.target as Node)) setShowEmoji(false); };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
   const handleSendMedia = async (file: File) => {
     if (!sel) return;
@@ -383,7 +425,7 @@ export default function CrmPage() {
                         Finalizar
                       </button>
                     ) : null}
-                    {['phone','video','info','more'].map(i => (
+                    {['info','more'].map(i => (
                       <button key={i} className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"><Icon n={i} s={19}/></button>
                     ))}
                   </div>
@@ -410,9 +452,17 @@ export default function CrmPage() {
                 </div>
                 <div className="bg-white border-t border-gray-200 px-5 py-3">
                   <div className="flex items-center gap-2 bg-gray-50 rounded-2xl border border-gray-200 px-4 py-1.5">
-                    <button className="text-gray-400 hover:text-gray-600 p-1"><Icon n="emoji" s={20}/></button>
+                    <div className="relative">
+                      <button onClick={()=>setShowEmoji(!showEmoji)} className="text-gray-400 hover:text-gray-600 p-1"><Icon n="emoji" s={20}/></button>
+                      {showEmoji && <div ref={emojiRef} className="absolute bottom-full left-0 mb-2 bg-white border rounded-xl shadow-xl p-2 grid grid-cols-8 gap-1 z-50 w-72 max-h-52 overflow-y-auto">
+                        {EMOJIS.map((e,i) => (
+                          <button key={i} onClick={()=>{setInput(p=>p+e);setShowEmoji(false)}} className="hover:bg-gray-100 rounded p-1 text-lg leading-none">{e}</button>
+                        ))}
+                      </div>}
+                    </div>
                     <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*,audio/*" onChange={e=>{const f=e.target.files?.[0];if(f){handleSendMedia(f);e.target.value=''}}} />
                     <button onClick={()=>fileInputRef.current?.click()} disabled={uploading} className="text-gray-400 hover:text-gray-600 p-1 disabled:opacity-50">{uploading?<span className="text-[10px]">...</span>:<Icon n="attach" s={20}/>}</button>
+                    <button onClick={isRecording?stopRecording:startRecording} className={'p-1 '+(isRecording?'text-red-500 animate-pulse':'text-gray-400 hover:text-gray-600')} title={isRecording?'Parar gravação':'Gravar áudio'}><Icon n={isRecording?'microphone':'microphone'} s={20}/></button>
                     <input type="text" placeholder={uploading?'Enviando mídia...':'Digite sua mensagem...'} value={input} onChange={e=>setInput(e.target.value)}
                       onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleSend()}}}
                       className="flex-1 bg-transparent text-sm outline-none py-1.5 px-2 placeholder:text-gray-300" disabled={uploading} />
