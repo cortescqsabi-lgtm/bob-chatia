@@ -28,10 +28,8 @@ async function downloadMedia(supabase: any, msgData: any, instance: string): Pro
     if (!res.ok) { console.error('getBase64 failed:', res.status); return null; }
     const json = await res.json();
     if (!json?.base64) { console.error('getBase64 missing base64:', JSON.stringify(json)); return null; }
-    const match = json.base64.match(/^data:([^;]+);base64,(.+)$/);
-    if (!match) { console.error('getBase64 invalid format'); return null; }
-    const mime = match[1];
-    const buffer = Buffer.from(match[2], 'base64');
+    const mime = json.mimetype || 'application/octet-stream';
+    const buffer = Buffer.from(json.base64, 'base64');
     const ext = mime.split('/')[1] || 'bin';
     const fileName = `webhook_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
     const { data: uploadData, error: uploadError } = await supabase.storage.from('media').upload(fileName, buffer, { contentType: mime, upsert: true });
