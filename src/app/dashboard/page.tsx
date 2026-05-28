@@ -105,7 +105,9 @@ export default function CrmPage() {
   const handleSend = async () => {
     if(!input.trim()||!sel)return;
     const t=input.trim(); setInput(''); setMsgs(p=>[...p,{id:'sending',content:t,role:'assistant',created_at:new Date().toISOString(),direction:'outgoing'}]);
-    try { await fetch('/api/crm/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({conversation_id:sel.id,content:t,type:'text'})}); loadMsgs(sel.id); } catch {}
+    const r=await fetch('/api/crm/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({conversation_id:sel.id,content:t,type:'text'})});
+    if(!r.ok) setMsgs(p=>p.filter(m=>m.id!=='sending'));
+    loadMsgs(sel.id);
   };
 
   const handleSaveTag = async () => {

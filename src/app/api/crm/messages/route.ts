@@ -27,18 +27,51 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const supabase = getSupabaseAdmin();
   const { conversation_id, content, type = 'text' } = await req.json();
-  const { data, error } = await supabase
+
+  const { data: conv, error: convErr } = await supabase
+    .from('conversations')
+    .select('id, tenant_id, channel_identifier')
+    .eq('id', conversation_id)
+    .single();
+  if (convErr || !conv) return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
+
+  const { data: msg, error: msgErr } = await supabase
     .from('messages')
     .insert({
       conversation_id,
-      tenant_id: 'default_tenant',
+      tenant_id: conv.tenant_id,
       role: 'assistant',
       content,
       type,
       direction: 'outgoing',
-      ai_generated: false
-    });
+      ai_generated: false,
+      status: 'sent'
+    })
+    .select()
+    .single();
+  if (msgErr) return NextResponse.json({ error: msgErr.message }, { status: 500 });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ success: true, data });
+  const evoUrl = 'https://b2zap-evolution-api.yagj5r.easypanel.host';
+  const evoKey = process.env.EVOLUTION_API_KEY;
+  if (evoKey) {
+    try {
+      const evoRes = await fetch(`${evoUrl}/message/sendText/b2zap`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
+        body: JSON.stringify({
+          number: conv.channel_identifier,
+          options: { delay: 1200, presence: 'composing' },
+          textMessage: { text: content }
+        })
+      });
+      if (!evoRes.ok) {
+        await supabase.from('messages').update({ status: 'failed' }).eq('id', msg.id);
+      }
+    } catch (e) {
+      console.error('Evolution send error:', e);
+      await supabase.from('messages').update({ status: 'failed' }).eq('id', msg.id);
+    }
+  }
+
+  return NextResponse.json({ success: true, data: msg });
 }
