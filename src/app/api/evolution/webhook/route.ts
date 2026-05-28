@@ -6,13 +6,39 @@ function extractMessageContent(data: any): { text: string; type: string } {
   const msg = data.message;
   if (msg.conversation) return { text: msg.conversation, type: 'text' };
   if (msg.extendedTextMessage?.text) return { text: msg.extendedTextMessage.text, type: 'text' };
-  if (msg.imageMessage) return { text: msg.imageMessage.url || msg.imageMessage.caption || '', type: 'image' };
-  if (msg.videoMessage) return { text: msg.videoMessage.url || msg.videoMessage.caption || '', type: 'video' };
-  if (msg.audioMessage) return { text: msg.audioMessage.url || '', type: 'audio' };
-  if (msg.documentMessage) return { text: msg.documentMessage.url || msg.documentMessage.caption || '', type: 'document' };
+  if (msg.imageMessage) return { text: msg.imageMessage.caption || '', type: 'image' };
+  if (msg.videoMessage) return { text: msg.videoMessage.caption || '', type: 'video' };
+  if (msg.audioMessage) return { text: '', type: 'audio' };
+  if (msg.documentMessage) return { text: msg.documentMessage.caption || '', type: 'document' };
   if (msg.locationMessage) return { text: `${msg.locationMessage.latitude},${msg.locationMessage.longitude}`, type: 'location' };
-  if (msg.stickerMessage) return { text: msg.stickerMessage.url || '', type: 'sticker' };
+  if (msg.stickerMessage) return { text: '', type: 'sticker' };
   return { text: '', type: 'text' };
+}
+
+const EVO_URL = 'https://b2zap-evolution-api.yagj5r.easypanel.host';
+const EVO_KEY = process.env.EVOLUTION_API_KEY || '429683C4C977415CAAFCCE10F7D57E11';
+
+async function downloadMedia(supabase: any, msgData: any, instance: string): Promise<string|null> {
+  try {
+    const res = await fetch(`${EVO_URL}/chat/getBase64FromMediaMessage/${instance}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': EVO_KEY },
+      body: JSON.stringify({ message: { key: msgData.key }, convertToMp4: false })
+    });
+    if (!res.ok) { console.error('getBase64 failed:', res.status); return null; }
+    const json = await res.json();
+    if (!json?.base64) { console.error('getBase64 missing base64:', JSON.stringify(json)); return null; }
+    const match = json.base64.match(/^data:([^;]+);base64,(.+)$/);
+    if (!match) { console.error('getBase64 invalid format'); return null; }
+    const mime = match[1];
+    const buffer = Buffer.from(match[2], 'base64');
+    const ext = mime.split('/')[1] || 'bin';
+    const fileName = `webhook_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+    const { data: uploadData, error: uploadError } = await supabase.storage.from('media').upload(fileName, buffer, { contentType: mime, upsert: true });
+    if (uploadError) { console.error('Storage upload error:', uploadError); return null; }
+    const { data: { publicUrl } } = supabase.storage.from('media').getPublicUrl(fileName);
+    return publicUrl;
+  } catch (e) { console.error('downloadMedia error:', e); return null; }
 }
 
 function extractPhone(remoteJid: string): string {
@@ -55,6 +81,14 @@ export async function POST(req: NextRequest) {
         if (isFromMe) continue;
         if (!text && type === 'text') continue;
 
+        let mediaUrl: string|null = null;
+        let finalType = type;
+        if (type === 'image' || type === 'video' || type === 'audio' || type === 'sticker') {
+          mediaUrl = await downloadMedia(supabase, msgData, 'b2zap');
+          if (!mediaUrl) finalType = 'text';
+        }
+        const finalContent = mediaUrl || text || '';
+
         const { data: existing } = await supabase
           .from('conversations')
           .select('id, tenant_id, status')
@@ -84,7 +118,7 @@ export async function POST(req: NextRequest) {
         }
 
         if (conversation) {
-          try { await supabase.from('messages').insert({ conversation_id: conversation.id, tenant_id: conversation.tenant_id, role: 'user', content: text, type: type, direction: 'incoming', ai_generated: false }); } catch (e) { console.error('Insert message error:', e); }
+          try { await supabase.from('messages').insert({ conversation_id: conversation.id, tenant_id: conversation.tenant_id, role: 'user', content: finalContent, type: finalType, direction: 'incoming', ai_generated: false }); } catch (e) { console.error('Insert message error:', e); }
           try { await supabase.from('ai_processing_queue').insert({ conversation_id: conversation.id, message_id: msgId, status: 'pending' }); } catch (e) { console.error('Insert queue error:', e); }
           const updateData: Record<string, any> = { last_message_at: new Date().toISOString() };
           if (pushName) updateData.contact_name = pushName;
