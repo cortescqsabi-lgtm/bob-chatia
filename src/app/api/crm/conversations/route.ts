@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabase } from '@/lib/supabase';
+import { getSupabase, getSupabaseAdmin } from '@/lib/supabase';
 
 export async function GET(req: NextRequest) {
   const supabase = getSupabase();
@@ -7,6 +7,12 @@ export async function GET(req: NextRequest) {
   const page = parseInt(searchParams.get('page') || '1');
   const limit = parseInt(searchParams.get('limit') || '20');
   const from = (page - 1) * limit;
+
+  if (searchParams.get('type') === 'channels') {
+    const admin = getSupabaseAdmin();
+    const { data } = await admin.from('channels').select('*').order('created_at', { ascending: false });
+    return NextResponse.json({ data: data || [] });
+  }
 
   const { data, error, count } = await supabase
     .from('conversations')
