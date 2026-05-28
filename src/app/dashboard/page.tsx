@@ -318,6 +318,14 @@ export default function CrmPage() {
                     <p className="text-xs text-green-600 font-medium">Online</p>
                   </div>
                   <div className="flex items-center gap-1">
+                    {(sel.status === 'attending' || sel.status === 'waiting' || sel.status === 'active') && (
+                      <button onClick={async () => {
+                        await fetch('/api/crm/conversations',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:sel.id,status:'resolved'})});
+                        setSel(null); setMsgs([]); loadConvs();
+                      }} className="text-xs font-semibold border border-green-500 text-green-600 px-3 py-1.5 rounded-lg hover:bg-green-50 transition mr-1">
+                        Finalizar
+                      </button>
+                    )}
                     {['phone','video','info','more'].map(i => (
                       <button key={i} className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"><Icon n={i} s={19}/></button>
                     ))}
