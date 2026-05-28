@@ -95,6 +95,11 @@ export default function CrmPage() {
   const [recordingSec, setRecordingSec] = useState(0);
   const [previewUrl, setPreviewUrl] = useState<string|null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [activeAudio, setActiveAudio] = useState<string|null>(null);
+  const [audioProgress, setAudioProgress] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(0);
+  const audioRef = useRef<HTMLAudioElement|null>(null);
+  const audioTimerRef = useRef<ReturnType<typeof setInterval>|null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [contactSearch, setContactSearch] = useState('');
   const [contactModal, setContactModal] = useState(false);
@@ -160,6 +165,25 @@ export default function CrmPage() {
   };
   const fmtSec = (s: number) => { const m = Math.floor(s/60); return String(m).padStart(2,'0')+':'+String(s%60).padStart(2,'0'); };
 
+  const playAudio = (msgId: string, src: string) => {
+    if (!audioRef.current) {
+      audioRef.current = new Audio();
+      audioRef.current.onended = () => { setActiveAudio(null); setAudioProgress(0); if (audioTimerRef.current) clearInterval(audioTimerRef.current); };
+      audioRef.current.onloadedmetadata = () => setAudioDuration(audioRef.current!.duration || 0);
+    }
+    if (activeAudio === msgId && !audioRef.current.paused) {
+      audioRef.current.pause();
+      setActiveAudio(null);
+      if (audioTimerRef.current) clearInterval(audioTimerRef.current);
+    } else {
+      if (audioRef.current.src !== src) {
+        audioRef.current.src = src;
+        audioRef.current.load();
+      }
+      audioRef.current.play().then(() => { setActiveAudio(msgId); if (audioTimerRef.current) clearInterval(audioTimerRef.current); audioTimerRef.current = setInterval(() => { setAudioProgress(audioRef.current?.currentTime || 0); }, 250); }).catch(() => setActiveAudio(null));
+    }
+  };
+
   useEffect(() => {
     const handleClick = (e: MouseEvent) => { if (emojiRef.current && !emojiRef.current.contains(e.target as Node)) setShowEmoji(false); };
     document.addEventListener('mousedown', handleClick);
@@ -211,6 +235,8 @@ export default function CrmPage() {
   useEffect(() => { if(!sel)return; const t = setInterval(() => loadMsgs(sel.id), 3000); return () => clearInterval(t); }, [sel]);
 
   useEffect(() => { endRef.current?.scrollIntoView({behavior:'smooth'}); }, [msgs]);
+
+  useEffect(() => { return () => { if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; } if (audioTimerRef.current) clearInterval(audioTimerRef.current); }; }, []);
 
   const loadMsgs = async (id: string) => {
     try { const r=await fetch('/api/crm/messages?conversation_id='+id); const d=await r.json(); setMsgs(d.data||[]); } catch { setMsgs([]); }
@@ -505,7 +531,16 @@ export default function CrmPage() {
                         ) : m.type === 'video' ? (
                           <video src={m.content} controls className="max-w-full rounded-lg" />
                         ) : m.type === 'audio' ? (
-                          <audio src={m.content} controls className="max-w-full" />
+                          <div className="flex items-center gap-2 min-w-[200px]">
+                            <button onClick={() => playAudio(m.id||String(i), m.content)}
+                              className={'w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition '+(activeAudio===m.id?'bg-[#0084c7] text-white':'bg-gray-100 text-gray-600 hover:bg-gray-200')}>
+                              {activeAudio === m.id ? <Icon n="pause" s={16}/> : <Icon n="play" s={16}/>}
+                            </button>
+                            <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                              <div className="h-full bg-[#0084c7] rounded-full transition-all duration-200" style={{width: audioDuration > 0 && activeAudio === m.id ? ((audioProgress / audioDuration) * 100)+'%' : '0%'}} />
+                            </div>
+                            <span className="text-[11px] text-gray-400 font-mono w-10 text-right">{activeAudio === m.id ? fmtSec(Math.round(audioProgress)) : fmtSec(Math.round(audioDuration)) || '00:00'}</span>
+                          </div>
                         ) : (
                           <p>{m.content}</p>
                         )}
