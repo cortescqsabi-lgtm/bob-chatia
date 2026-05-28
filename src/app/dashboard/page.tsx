@@ -202,8 +202,10 @@ export default function CrmPage() {
     try { const r=await fetch('/api/crm/conversations'); const d=await r.json(); setConvs(d.data||[]); } catch { setConvs([]); }
   }, []);
 
+  const [clock, setClock] = useState(0);
   useEffect(() => { loadConvs(); loadTags(); loadAllConvTags(); setLoading(false); }, [loadConvs, loadTags, loadAllConvTags]);
 
+  useEffect(() => { const t = setInterval(() => setClock(c => c + 1), 10000); return () => clearInterval(t); }, []);
   useEffect(() => { const t = setInterval(loadConvs, 5000); return () => clearInterval(t); }, [loadConvs]);
 
   useEffect(() => { if(!sel)return; const t = setInterval(() => loadMsgs(sel.id), 3000); return () => clearInterval(t); }, [sel]);
