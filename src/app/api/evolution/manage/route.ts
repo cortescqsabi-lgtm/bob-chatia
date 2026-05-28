@@ -36,6 +36,10 @@ export async function POST(req: NextRequest) {
 
       if (instance) {
         if (instance.connectionStatus === 'open') {
+          await evoFetch('/webhook/set/b2zap', {
+            method: 'POST',
+            body: JSON.stringify({ webhook: { url: 'https://bob-chatia.vercel.app/api/evolution/webhook', enabled: true } })
+          });
           return Response.json({ connected: true, qrcode: null, message: 'Ja conectado' });
         }
         await evoFetch('/instance/delete/b2zap', { method: 'DELETE' });
