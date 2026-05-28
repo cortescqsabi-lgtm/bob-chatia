@@ -21,80 +21,85 @@ export async function POST(req: NextRequest) {
   try {
     const supabase = getSupabaseAdmin();
     const body = await req.json();
+    const event = (body.event || '').toLowerCase().replace(/\./g, '_');
 
-    const event = body.event?.toLowerCase().replace('.', '_');
-    if (event === 'messages_upsert' && body.data?.key) {
-      const { key, message, pushName } = body.data;
-      const remoteJid = key.remoteJid || '';
-      const phone = extractPhone(remoteJid);
-      const isFromMe = key.fromMe === true;
-      const msgId = key.id || '';
+    if (event === 'messages_upsert') {
+      const messages = Array.isArray(body.data) ? body.data : (body.data ? [body.data] : []);
 
-      const { text, type } = extractMessageContent(body.data);
+      for (const msgData of messages) {
+        if (!msgData?.key) continue;
+        const { key, pushName } = msgData;
+        const remoteJid = key.remoteJid || '';
+        const phone = extractPhone(remoteJid);
+        const isFromMe = key.fromMe === true;
+        const msgId = key.id || '';
+        const { text, type } = extractMessageContent(msgData);
 
-      if (!phone || isFromMe) {
-        return Response.json({ status: 'ok', ignored: isFromMe ? 'outgoing' : 'no_phone' });
-      }
+        if (!phone || isFromMe || !text) continue;
 
-      const { data: existing } = await supabase
-        .from('conversations')
-        .select('id, tenant_id')
-        .eq('channel_identifier', phone)
-        .eq('channel_type', 'whatsapp')
-        .order('last_message_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      let conversation = existing;
-      if (!conversation) {
-        const { data: newConv } = await supabase
+        const { data: existing } = await supabase
           .from('conversations')
-          .insert({
-            tenant_id: '00000000-0000-0000-0000-000000000001',
-            channel_type: 'whatsapp',
-            channel_identifier: phone,
-            contact_name: pushName || null,
-            last_message_at: new Date().toISOString(),
-            status: 'active'
-          })
-          .select()
-          .single();
-        conversation = newConv;
+          .select('id, tenant_id')
+          .eq('channel_identifier', phone)
+          .eq('channel_type', 'whatsapp')
+          .order('last_message_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        let conversation = existing;
+        if (!conversation) {
+          const { data: newConv } = await supabase
+            .from('conversations')
+            .insert({
+              tenant_id: '00000000-0000-0000-0000-000000000001',
+              channel_type: 'whatsapp',
+              channel_identifier: phone,
+              contact_name: pushName || null,
+              last_message_at: new Date().toISOString(),
+              status: 'active'
+            })
+            .select()
+            .single();
+          conversation = newConv;
+        }
+
+        if (conversation) {
+          await supabase.from('messages').insert({
+            conversation_id: conversation.id,
+            tenant_id: conversation.tenant_id,
+            role: 'user',
+            content: text,
+            type: type,
+            direction: 'incoming',
+            ai_generated: false
+          }).then(() => {}).catch(e => console.error('Insert message error:', e));
+
+          await supabase.from('ai_processing_queue').insert({
+            conversation_id: conversation.id,
+            message_id: msgId,
+            status: 'pending'
+          }).then(() => {}).catch(e => console.error('Insert queue error:', e));
+
+          await supabase
+            .from('conversations')
+            .update({ last_message_at: new Date().toISOString() })
+            .eq('id', conversation.id)
+            .then(() => {}).catch(e => console.error('Update conv error:', e));
+        }
       }
 
-      if (conversation) {
-        await supabase.from('messages').insert({
-          conversation_id: conversation.id,
-          tenant_id: conversation.tenant_id,
-          role: 'user',
-          content: text,
-          type: type,
-          direction: 'incoming',
-          ai_generated: false
-        });
-
-        await supabase.from('ai_processing_queue').insert({
-          conversation_id: conversation.id,
-          message_id: msgId,
-          status: 'pending'
-        });
-
-        await supabase
-          .from('conversations')
-          .update({ last_message_at: new Date().toISOString() })
-          .eq('id', conversation.id);
-      }
-
-      return Response.json({ status: 'ok', messageId: msgId });
+      return Response.json({ status: 'ok' });
     }
 
-    return Response.json({ error: 'Invalid webhook format' }, { status: 400 });
+    if (event === 'connection_update') {
+      console.log('Connection update:', JSON.stringify(body.data));
+    }
+
+    console.log('Webhook event:', event, JSON.stringify(body).substring(0, 200));
+    return Response.json({ status: 'ok', event });
   } catch (error) {
     console.error('Webhook error:', error);
-    return Response.json(
-      { error: { code: 'INTERNAL_SERVER_ERROR', message: 'Webhook processing failed' } },
-      { status: 500 }
-    );
+    return Response.json({ status: 'ok', error: 'processing' });
   }
 }
 
