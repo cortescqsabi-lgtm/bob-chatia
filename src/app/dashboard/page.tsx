@@ -5,7 +5,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 /* ─── Types ─── */
 interface Tag { id: string; name: string; color: string; }
 interface Conversation { id: string; channel_identifier: string; contact_name: string | null; last_message_at: string; status: string; channel_type: string; }
-interface Message { id: string; content: string; role: string; created_at: string; direction?: string; }
+interface Message { id: string; content: string; role: string; created_at: string; direction?: string; type?: string; }
 
 /* ─── SVG Icons ─── */
 const S: Record<string,string> = {
@@ -69,6 +69,28 @@ export default function CrmPage() {
   const [tagName, setTagName] = useState('');
   const [tagColor, setTagColor] = useState('#6366f1');
   const [showTagPicker, setShowTagPicker] = useState<string|null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleSendMedia = async (file: File) => {
+    if (!sel) return;
+    const mediaType = file.type.startsWith('video') ? 'video' : file.type.startsWith('audio') ? 'audio' : 'image';
+    const ext = file.name.split('.').pop() || 'bin';
+    setUploading(true);
+    const fd = new FormData();
+    fd.append('file', file, `media.${ext}`);
+    try {
+      const r = await fetch('/api/media/upload', { method: 'POST', body: fd });
+      const j = await r.json();
+      if (j.success) {
+        setMsgs(p=>[...p,{id:'sending',content:j.url,role:'assistant',created_at:new Date().toISOString(),direction:'outgoing',type:mediaType}]);
+        const mr = await fetch('/api/crm/messages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conversation_id: sel.id, content: '', type: mediaType, media_url: j.url }) });
+        if (!mr.ok) setMsgs(p=>p.filter(m=>m.id!=='sending'));
+        loadMsgs(sel.id);
+      }
+    } catch {}
+    setUploading(false);
+  };
 
   const loadTags = useCallback(async () => {
     try { const r=await fetch('/api/tags'); const d=await r.json(); setTags(d.data||[]); } catch {}
@@ -358,7 +380,15 @@ export default function CrmPage() {
                   : [...msgs].reverse().map((m,i) => (
                     <div key={m.id||i} className={'flex '+(m.role==='user'||m.direction==='incoming'?'justify-start':'justify-end')}>
                       <div className={'max-w-[70%] px-4 py-2.5 text-sm leading-relaxed rounded-2xl '+(m.role==='user'||m.direction==='incoming'?'bg-white text-gray-800 shadow-sm rounded-tl-sm':'bg-[#0084c7] text-white rounded-tr-sm')}>
-                        <p>{m.content}</p>
+                        {m.type === 'image' ? (
+                          <img src={m.content} alt="imagem" className="max-w-full rounded-lg" loading="lazy" />
+                        ) : m.type === 'video' ? (
+                          <video src={m.content} controls className="max-w-full rounded-lg" />
+                        ) : m.type === 'audio' ? (
+                          <audio src={m.content} controls className="max-w-full" />
+                        ) : (
+                          <p>{m.content}</p>
+                        )}
                         <p className={'text-[10px] mt-1.5 '+(m.role==='user'||m.direction==='incoming'?'text-gray-400':'text-blue-200')}>{fmtTime(m.created_at)}</p>
                       </div>
                     </div>
@@ -368,10 +398,11 @@ export default function CrmPage() {
                 <div className="bg-white border-t border-gray-200 px-5 py-3">
                   <div className="flex items-center gap-2 bg-gray-50 rounded-2xl border border-gray-200 px-4 py-1.5">
                     <button className="text-gray-400 hover:text-gray-600 p-1"><Icon n="emoji" s={20}/></button>
-                    <button className="text-gray-400 hover:text-gray-600 p-1"><Icon n="attach" s={20}/></button>
-                    <input type="text" placeholder="Digite sua mensagem..." value={input} onChange={e=>setInput(e.target.value)}
+                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*,audio/*" onChange={e=>{const f=e.target.files?.[0];if(f){handleSendMedia(f);e.target.value=''}}} />
+                    <button onClick={()=>fileInputRef.current?.click()} disabled={uploading} className="text-gray-400 hover:text-gray-600 p-1 disabled:opacity-50">{uploading?<span className="text-[10px]">...</span>:<Icon n="attach" s={20}/>}</button>
+                    <input type="text" placeholder={uploading?'Enviando mídia...':'Digite sua mensagem...'} value={input} onChange={e=>setInput(e.target.value)}
                       onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleSend()}}}
-                      className="flex-1 bg-transparent text-sm outline-none py-1.5 px-2 placeholder:text-gray-300" />
+                      className="flex-1 bg-transparent text-sm outline-none py-1.5 px-2 placeholder:text-gray-300" disabled={uploading} />
                     <button onClick={handleSend}
                       className={'w-9 h-9 rounded-full flex items-center justify-center transition '+(input.trim()?'bg-[#0084c7] text-white shadow-sm hover:bg-[#0070b0]':'bg-gray-200 text-gray-400')}>
                       <Icon n="send" s={17}/>

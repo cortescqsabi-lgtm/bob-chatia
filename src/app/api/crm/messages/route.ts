@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const supabase = getSupabaseAdmin();
-  const { conversation_id, content, type = 'text' } = await req.json();
+  const { conversation_id, content, type = 'text', media_url } = await req.json();
 
   const { data: conv, error: convErr } = await supabase
     .from('conversations')
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
       conversation_id,
       tenant_id: conv.tenant_id,
       role: 'assistant',
-      content,
+      content: media_url || content,
       type,
       direction: 'outgoing',
       ai_generated: false,
@@ -55,16 +55,54 @@ export async function POST(req: NextRequest) {
   const evoKey = process.env.EVOLUTION_API_KEY;
   if (evoKey) {
     try {
-      const evoRes = await fetch(`${evoUrl}/message/sendText/b2zap`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
-        body: JSON.stringify({
-          number: conv.channel_identifier,
-          options: { delay: 1200, presence: 'composing' },
-          textMessage: { text: content }
-        })
-      });
+      let evoRes: Response;
+      const number = conv.channel_identifier;
+
+      if (type === 'image') {
+        evoRes = await fetch(`${evoUrl}/message/sendMedia/b2zap`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
+          body: JSON.stringify({
+            number,
+            options: { delay: 1200, presence: 'composing' },
+            mediaMessage: { mediatype: 'image', media: media_url, caption: content || '' }
+          })
+        });
+      } else if (type === 'video') {
+        evoRes = await fetch(`${evoUrl}/message/sendMedia/b2zap`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
+          body: JSON.stringify({
+            number,
+            options: { delay: 1200, presence: 'composing' },
+            mediaMessage: { mediatype: 'video', media: media_url, caption: content || '' }
+          })
+        });
+      } else if (type === 'audio') {
+        evoRes = await fetch(`${evoUrl}/message/sendAudio/b2zap`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
+          body: JSON.stringify({
+            number,
+            audio: media_url,
+            options: { delay: 1200, presence: 'composing' }
+          })
+        });
+      } else {
+        evoRes = await fetch(`${evoUrl}/message/sendText/b2zap`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
+          body: JSON.stringify({
+            number,
+            options: { delay: 1200, presence: 'composing' },
+            textMessage: { text: content }
+          })
+        });
+      }
+
       if (!evoRes.ok) {
+        const txt = await evoRes.text();
+        console.error('Evolution send failed:', evoRes.status, txt);
         await supabase.from('messages').update({ status: 'failed' }).eq('id', msg.id);
       }
     } catch (e) {
