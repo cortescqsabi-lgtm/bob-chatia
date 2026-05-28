@@ -6,9 +6,12 @@ function extractMessageContent(data: any): { text: string; type: string } {
   const msg = data.message;
   if (msg.conversation) return { text: msg.conversation, type: 'text' };
   if (msg.extendedTextMessage?.text) return { text: msg.extendedTextMessage.text, type: 'text' };
-  if (msg.imageMessage) return { text: msg.imageMessage.caption || '', type: 'image' };
-  if (msg.documentMessage) return { text: msg.documentMessage.caption || '', type: 'document' };
+  if (msg.imageMessage) return { text: msg.imageMessage.url || msg.imageMessage.caption || '', type: 'image' };
+  if (msg.videoMessage) return { text: msg.videoMessage.url || msg.videoMessage.caption || '', type: 'video' };
+  if (msg.audioMessage) return { text: msg.audioMessage.url || '', type: 'audio' };
+  if (msg.documentMessage) return { text: msg.documentMessage.url || msg.documentMessage.caption || '', type: 'document' };
   if (msg.locationMessage) return { text: `${msg.locationMessage.latitude},${msg.locationMessage.longitude}`, type: 'location' };
+  if (msg.stickerMessage) return { text: msg.stickerMessage.url || '', type: 'sticker' };
   return { text: '', type: 'text' };
 }
 
@@ -29,7 +32,6 @@ export async function POST(req: NextRequest) {
 
     if (event === 'messages_upsert') {
       const messages = Array.isArray(body.data) ? body.data : (body.data ? [body.data] : []);
-
       for (const msgData of messages) {
         if (!msgData?.key) continue;
         const { key, pushName } = msgData;
@@ -39,7 +41,19 @@ export async function POST(req: NextRequest) {
         const msgId = key.id || '';
         const { text, type } = extractMessageContent(msgData);
 
-        if (!phone || isFromMe || !text || isGroup(remoteJid)) continue;
+        if (!phone || isGroup(remoteJid)) continue;
+
+        if (isFromMe && msgData.status) {
+          const statusMap: Record<string, string> = { 'PENDING': 'sent', 'SERVER_ACK': 'sent', 'DELIVERY_ACK': 'delivered', 'READ': 'read' };
+          const newStatus = statusMap[msgData.status] || (typeof msgData.status === 'number' ? (['sent','sent','delivered','read'][msgData.status]) : null);
+          if (newStatus) {
+            await supabase.from('messages').update({ status: newStatus }).eq('evolution_msg_id', key.id).maybeSingle();
+          }
+          continue;
+        }
+
+        if (isFromMe) continue;
+        if (!text && type === 'text') continue;
 
         const { data: existing } = await supabase
           .from('conversations')
@@ -81,13 +95,15 @@ export async function POST(req: NextRequest) {
       const data = body.data || body;
       const items = Array.isArray(data) ? data : [data];
       for (const item of items) {
-        const key = item.key || item.key;
-        const update = item.update || {};
-        if (!key?.id) continue;
+        const keyData = (item && item.key) ? item.key : item;
+        const updateData = (item && item.update) ? item.update : {};
+        if (!keyData?.id) continue;
         const statusMap: Record<string, string> = { 'SERVER_ACK': 'sent', 'DELIVERY_ACK': 'delivered', 'READ': 'read' };
-        const newStatus = statusMap[update.status] || (typeof update.status === 'number' ? (['sent','sent','delivered','read'][update.status]) : null);
+        const rawStatus = updateData.status;
+        const newStatus = statusMap[rawStatus] || (typeof rawStatus === 'number' ? (['sent','sent','delivered','read'][rawStatus]) : null);
         if (newStatus) {
-          await supabase.from('messages').update({ status: newStatus }).eq('evolution_msg_id', key.id);
+          const { error } = await supabase.from('messages').update({ status: newStatus }).eq('evolution_msg_id', keyData.id);
+          if (error) console.error('Status update error:', error, 'key:', keyData.id, 'status:', newStatus);
         }
       }
       return Response.json({ status: 'ok' });
