@@ -1,9 +1,9 @@
 import { NextRequest } from 'next/server';
-import { getSupabase, getSupabaseAdmin } from '@/lib/supabase';
+import { getSupabaseAdmin } from '@/lib/supabase';
 import OpenAI from 'openai';
 
 async function getTenantAIConfig(tenantId: string) {
-  const supabase = getSupabase();
+  const supabase = getSupabaseAdmin();
   const { data } = await supabase
     .from('ai_configurations')
     .select('*')
@@ -35,7 +35,7 @@ async function retrieveContext(tenantId: string, query: string, topK = 5, thresh
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = getSupabase();
+    const supabase = getSupabaseAdmin();
     const { conversation_id, message, temperature = 0.7 } = await req.json();
     const tenantId = '00000000-0000-0000-0000-000000000001';
     const aiConfig = await getTenantAIConfig(tenantId);

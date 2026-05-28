@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const supabase = getSupabase();
+  const supabase = getSupabaseAdmin();
   const { conversation_id, content, type = 'text' } = await req.json();
   const { data, error } = await supabase
     .from('messages')

@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { getSupabase } from '@/lib/supabase';
+import { getSupabaseAdmin } from '@/lib/supabase';
 
 export async function GET() {
-  const supabase = getSupabase();
-  const tenantId = 'default_tenant';
+  const supabase = getSupabaseAdmin();
+  const tenantId = '00000000-0000-0000-0000-000000000001';
 
   const today = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
