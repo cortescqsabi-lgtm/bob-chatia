@@ -131,6 +131,27 @@ export default function CrmPage() {
     loadSingleConvTags(convId);
   };
 
+  const [dragId, setDragId] = useState<string|null>(null);
+
+  const handleDrop = async (convId: string, targetTagId: string|null) => {
+    const conv = convs.find(c => c.id === convId);
+    if (!conv) return;
+    const currentTags = convTags[convId] || [];
+    if (targetTagId) {
+      if (!currentTags.some(t => t.id === targetTagId)) {
+        await handleAssignTag(convId, targetTagId);
+      }
+      for (const t of currentTags) {
+        if (t.id !== targetTagId) await handleUnassignTag(convId, t.id);
+      }
+      setConvTags(p => ({...p, [convId]: [tags.find(t=>t.id===targetTagId)!]}));
+    } else {
+      for (const t of currentTags) await handleUnassignTag(convId, t.id);
+      setConvTags(p => ({...p, [convId]: []}));
+    }
+    setDragId(null);
+  };
+
   /* ─── Kanban data ─── */
   const kanbanCols = tags.map(t => ({ tag: t, convs: convs.filter(c => (convTags[c.id]||[]).some(ct => ct.id === t.id)) }));
   const untagged = convs.filter(c => !(convTags[c.id]||[]).length);
@@ -313,7 +334,10 @@ export default function CrmPage() {
             <h1 className="text-xl font-bold text-gray-800 mb-6">Kanban</h1>
             <div className="flex gap-4 h-[calc(100vh-140px)]">
               {kanbanCols.map(col => (
-                <div key={col.tag.id} className="flex-shrink-0 w-72 bg-gray-100 rounded-xl p-3">
+                <div key={col.tag.id} className="flex-shrink-0 w-72 bg-gray-100 rounded-xl p-3"
+                  onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('bg-blue-50'); }}
+                  onDragLeave={e => e.currentTarget.classList.remove('bg-blue-50')}
+                  onDrop={e => { e.preventDefault(); e.currentTarget.classList.remove('bg-blue-50'); const id = e.dataTransfer.getData('convId'); if (id) handleDrop(id, col.tag.id); }}>
                   <div className="flex items-center gap-2 mb-3 px-1">
                     <span className="w-3 h-3 rounded-full" style={{backgroundColor:col.tag.color}} />
                     <span className="font-semibold text-sm text-gray-700">{col.tag.name}</span>
@@ -321,7 +345,10 @@ export default function CrmPage() {
                   </div>
                   <div className="space-y-2 overflow-y-auto max-h-[calc(100vh-200px)]">
                     {col.convs.map(c => (
-                      <div key={c.id} className="bg-white rounded-lg p-3 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md transition"
+                      <div key={c.id} draggable
+                        onDragStart={e => { e.dataTransfer.setData('convId', c.id); setDragId(c.id); }}
+                        onDragEnd={() => setDragId(null)}
+                        className={'bg-white rounded-lg p-3 shadow-sm border border-gray-100 cursor-grab active:cursor-grabbing transition ' + (dragId === c.id ? 'opacity-50 shadow-md rotate-2' : 'hover:shadow-md')}
                         onClick={()=>{setMenu('atendimento');handleSelect(c)}}>
                         <div className="flex items-center gap-2 mb-1">
                           <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#0084c7] to-blue-400 flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
@@ -338,7 +365,10 @@ export default function CrmPage() {
                 </div>
               ))}
               {/* Untagged column */}
-              <div className="flex-shrink-0 w-72 bg-gray-100 rounded-xl p-3">
+              <div className="flex-shrink-0 w-72 bg-gray-100 rounded-xl p-3"
+                onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('bg-blue-50'); }}
+                onDragLeave={e => e.currentTarget.classList.remove('bg-blue-50')}
+                onDrop={e => { e.preventDefault(); e.currentTarget.classList.remove('bg-blue-50'); const id = e.dataTransfer.getData('convId'); if (id) handleDrop(id, null); }}>
                 <div className="flex items-center gap-2 mb-3 px-1">
                   <span className="w-3 h-3 rounded-full bg-gray-400" />
                   <span className="font-semibold text-sm text-gray-700">Sem tag</span>
@@ -346,7 +376,10 @@ export default function CrmPage() {
                 </div>
                 <div className="space-y-2 overflow-y-auto max-h-[calc(100vh-200px)]">
                   {untagged.map(c => (
-                    <div key={c.id} className="bg-white rounded-lg p-3 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md transition"
+                    <div key={c.id} draggable
+                      onDragStart={e => { e.dataTransfer.setData('convId', c.id); setDragId(c.id); }}
+                      onDragEnd={() => setDragId(null)}
+                      className={'bg-white rounded-lg p-3 shadow-sm border border-gray-100 cursor-grab active:cursor-grabbing transition ' + (dragId === c.id ? 'opacity-50 shadow-md rotate-2' : 'hover:shadow-md')}
                       onClick={()=>{setMenu('atendimento');handleSelect(c)}}>
                       <div className="flex items-center gap-2 mb-1">
                         <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#0084c7] to-blue-400 flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
