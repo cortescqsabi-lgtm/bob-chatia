@@ -1,15 +1,15 @@
 import { NextRequest } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 
-function extractMessageContent(data: any): { text: string; type: string } {
+function extractMessageContent(data: any): { text: string; type: string; mediaUrl?: string } {
   if (!data.message) return { text: '', type: 'text' };
   const msg = data.message;
   if (msg.conversation) return { text: msg.conversation, type: 'text' };
   if (msg.extendedTextMessage?.text) return { text: msg.extendedTextMessage.text, type: 'text' };
-  if (msg.imageMessage) return { text: msg.imageMessage.caption || '', type: 'image' };
-  if (msg.videoMessage) return { text: msg.videoMessage.caption || '', type: 'video' };
-  if (msg.audioMessage) return { text: '', type: 'audio' };
-  if (msg.documentMessage) return { text: msg.documentMessage.caption || '', type: 'document' };
+  if (msg.imageMessage) return { text: msg.imageMessage.caption || '', type: 'image', mediaUrl: msg.imageMessage.url };
+  if (msg.videoMessage) return { text: msg.videoMessage.caption || '', type: 'video', mediaUrl: msg.videoMessage.url };
+  if (msg.audioMessage) return { text: '', type: 'audio', mediaUrl: msg.audioMessage.url };
+  if (msg.documentMessage) return { text: msg.documentMessage.caption || '', type: 'document', mediaUrl: msg.documentMessage.url };
   if (msg.locationMessage) return { text: `${msg.locationMessage.latitude},${msg.locationMessage.longitude}`, type: 'location' };
   if (msg.stickerMessage) return { text: '', type: 'sticker' };
   return { text: '', type: 'text' };
@@ -18,25 +18,45 @@ function extractMessageContent(data: any): { text: string; type: string } {
 const EVO_URL = 'https://b2zap-evolution-api.yagj5r.easypanel.host';
 const EVO_KEY = process.env.EVOLUTION_API_KEY || '429683C4C977415CAAFCCE10F7D57E11';
 
-async function downloadMedia(supabase: any, msgData: any, instance: string): Promise<string|null> {
+async function uploadToSupabase(supabase: any, buffer: Buffer, mime: string): Promise<string|null> {
   try {
-    const res = await fetch(`${EVO_URL}/chat/getBase64FromMediaMessage/${instance}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'apikey': EVO_KEY },
-      body: JSON.stringify({ message: { key: msgData.key }, convertToMp4: false })
-    });
-    if (!res.ok) { console.error('getBase64 failed:', res.status); return null; }
-    const json = await res.json();
-    if (!json?.base64) { console.error('getBase64 missing base64:', JSON.stringify(json)); return null; }
-    const mime = json.mimetype || 'application/octet-stream';
-    const buffer = Buffer.from(json.base64, 'base64');
     const ext = mime.split('/')[1] || 'bin';
     const fileName = `webhook_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
     const { data: uploadData, error: uploadError } = await supabase.storage.from('media').upload(fileName, buffer, { contentType: mime, upsert: true });
     if (uploadError) { console.error('Storage upload error:', uploadError); return null; }
     const { data: { publicUrl } } = supabase.storage.from('media').getPublicUrl(fileName);
     return publicUrl;
-  } catch (e) { console.error('downloadMedia error:', e); return null; }
+  } catch (e) { console.error('uploadToSupabase error:', e); return null; }
+}
+
+async function downloadMedia(supabase: any, msgData: any, instance: string, mediaUrl?: string): Promise<string|null> {
+  // Try #1: direct URL with apikey
+  if (mediaUrl) {
+    try {
+      const res = await fetch(mediaUrl, { headers: { 'apikey': EVO_KEY } });
+      if (res.ok) {
+        const mime = res.headers.get('content-type') || 'application/octet-stream';
+        const buf = Buffer.from(await res.arrayBuffer());
+        const url = await uploadToSupabase(supabase, buf, mime);
+        if (url) return url;
+      }
+    } catch (e) { console.error('Direct download failed:', e); }
+  }
+
+  // Try #2: getBase64FromMediaMessage
+  try {
+    const res = await fetch(`${EVO_URL}/chat/getBase64FromMediaMessage/${instance}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': EVO_KEY },
+      body: JSON.stringify({ message: { key: msgData.key }, convertToMp4: false })
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (!json?.base64) return null;
+    const mime = json.mimetype || 'application/octet-stream';
+    const buf = Buffer.from(json.base64, 'base64');
+    return await uploadToSupabase(supabase, buf, mime);
+  } catch (e) { console.error('getBase64 failed:', e); return null; }
 }
 
 function extractPhone(remoteJid: string): string {
@@ -63,7 +83,7 @@ export async function POST(req: NextRequest) {
         const phone = extractPhone(remoteJid);
         const isFromMe = key.fromMe === true;
         const msgId = key.id || '';
-        const { text, type } = extractMessageContent(msgData);
+        const { text, type, mediaUrl } = extractMessageContent(msgData);
 
         if (!phone || isGroup(remoteJid)) continue;
 
@@ -79,13 +99,13 @@ export async function POST(req: NextRequest) {
         if (isFromMe) continue;
         if (!text && type === 'text') continue;
 
-        let mediaUrl: string|null = null;
+        let mediaPublicUrl: string|null = null;
         let finalType = type;
         if (type === 'image' || type === 'video' || type === 'audio' || type === 'sticker') {
-          mediaUrl = await downloadMedia(supabase, msgData, 'b2zap');
-          if (!mediaUrl) finalType = 'text';
+          mediaPublicUrl = await downloadMedia(supabase, msgData, 'b2zap', mediaUrl);
+          if (!mediaPublicUrl) finalType = 'text';
         }
-        const finalContent = mediaUrl || text || '';
+        const finalContent = mediaPublicUrl || text || '';
 
         const { data: existing } = await supabase
           .from('conversations')
