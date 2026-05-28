@@ -133,6 +133,19 @@ export default function CrmPage() {
   };
 
   const [dragId, setDragId] = useState<string|null>(null);
+  const [popupConv, setPopupConv] = useState<Conversation|null>(null);
+  const [popupMsgs, setPopupMsgs] = useState<Message[]>([]);
+  const [subtab, setSubtab] = useState<'aguardando'|'atendendo'>('aguardando');
+
+  const handleAccept = async (c: Conversation) => {
+    await fetch('/api/crm/conversations', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: c.id, status: 'attending' }) });
+    loadConvs();
+  };
+
+  const handlePopup = async (c: Conversation) => {
+    setPopupConv(c);
+    try { const r=await fetch('/api/crm/messages?conversation_id='+c.id); const d=await r.json(); setPopupMsgs(d.data||[]); } catch { setPopupMsgs([]); }
+  };
 
   const handleDrop = async (convId: string, targetTagId: string|null) => {
     const conv = convs.find(c => c.id === convId);
@@ -158,9 +171,10 @@ export default function CrmPage() {
   const untagged = convs.filter(c => !(convTags[c.id]||[]).length);
 
   /* ─── Render ─── */
-  const filtered = convs.filter(c => {
-    if(tab==='resolvidos') return c.status==='resolved';
-    return c.status!=='resolved';
+  const convsAbertas = convs.filter(c => c.status !== 'resolved');
+  const filtered = convsAbertas.filter(c => {
+    if(subtab === 'atendendo') return c.status === 'attending';
+    return c.status === 'waiting' || c.status === 'active';
   }).filter(c => {
     if(!search)return true;
     const q=search.toLowerCase();
@@ -213,11 +227,11 @@ export default function CrmPage() {
               </div>
             </div>
             <div className="flex border-b border-gray-100">
-              {['atendendo','aguardando'].map(s => (
-                <button key={s} onClick={() => {}}
-                  className={'flex-1 text-center text-xs font-semibold py-2.5 transition relative '+(s==='aguardando'?'text-[#0084c7]':'text-gray-400')}>
-                  {s==='atendendo'?'ATENDENDO':'AGUARDANDO'}
-                  {s==='aguardando' && <div className="absolute bottom-0 left-1/4 right-1/4 h-[2px] bg-[#0084c7] rounded-full" />}
+              {['aguardando','atendendo'].map(s => (
+                <button key={s} onClick={() => setSubtab(s as any)}
+                  className={'flex-1 text-center text-xs font-semibold py-2.5 transition relative '+(subtab===s?'text-[#0084c7]':'text-gray-400 hover:text-gray-600')}>
+                  {s==='aguardando'?'AGUARDANDO ('+convsAbertas.filter(c=>c.status==='waiting'||c.status==='active').length+')':'ATENDENDO ('+convsAbertas.filter(c=>c.status==='attending').length+')'}
+                  {subtab===s && <div className="absolute bottom-0 left-1/4 right-1/4 h-[2px] bg-[#0084c7] rounded-full" />}
                 </button>
               ))}
             </div>
@@ -264,8 +278,18 @@ export default function CrmPage() {
                     </div>
                   </div>
                   <div className="flex flex-col items-center gap-1.5 flex-shrink-0">
-                    <span className="bg-green-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">3</span>
-                    <div className="flex gap-1"><Icon n="check" s={14} c="text-green-500 opacity-60"/><Icon n="eye" s={14} c="text-blue-400 opacity-60"/></div>
+                    {c.status === 'waiting' || c.status === 'active' ? (
+                      <button onClick={e=>{e.stopPropagation();handleAccept(c)}}
+                        className="w-5 h-5 rounded-full bg-green-500 text-white flex items-center justify-center hover:bg-green-600 transition" title="Aceitar conversa">
+                        <Icon n="check" s={12}/>
+                      </button>
+                    ) : (
+                      <span className="w-5 h-5 rounded-full bg-green-100 text-green-600 text-[9px] font-bold flex items-center justify-center">OK</span>
+                    )}
+                    <button onClick={e=>{e.stopPropagation();handlePopup(c)}}
+                      className="text-blue-400 hover:text-blue-600 transition" title="Visualizar sem marcar como lido">
+                      <Icon n="eye" s={15}/>
+                    </button>
                   </div>
                 </button>
               ))}
@@ -482,6 +506,40 @@ export default function CrmPage() {
             <div className="flex gap-2 mt-6">
               <button onClick={()=>setTagModal(false)} className="flex-1 border border-gray-200 rounded-lg py-2 text-sm font-medium text-gray-600 hover:bg-gray-50">Cancelar</button>
               <button onClick={handleSaveTag} className="flex-1 bg-[#0084c7] text-white rounded-lg py-2 text-sm font-medium hover:bg-[#0070b0]">{editTag?'Salvar':'Criar'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ POPUP (VISUALIZAR SEM MARCAR) ═══ */}
+      {popupConv && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={()=>setPopupConv(null)}>
+          <div className="bg-white rounded-xl w-full max-w-lg mx-4 shadow-xl max-h-[80vh] flex flex-col" onClick={e=>e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#0084c7] to-blue-400 flex items-center justify-center text-white font-semibold text-sm">
+                  {(popupConv.contact_name||'?').charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <p className="font-semibold text-sm text-gray-800">{popupConv.contact_name||fmtPhone(popupConv.channel_identifier)}</p>
+                  <p className="text-xs text-gray-400">Visualização sem marcação de leitura</p>
+                </div>
+              </div>
+              <button onClick={()=>setPopupConv(null)} className="text-gray-400 hover:text-gray-600"><Icon n="x" s={20}/></button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-5 space-y-3" style={{backgroundImage:'radial-gradient(circle at 1px 1px,#e2e4e9 1px,transparent 0)',backgroundSize:'20px 20px'}}>
+              {popupMsgs.length===0 ? <div className="text-center text-gray-400 text-sm py-8">Nenhuma mensagem</div>
+              : [...popupMsgs].reverse().map((m,i) => (
+                <div key={m.id||i} className={'flex '+(m.role==='user'||m.direction==='incoming'?'justify-start':'justify-end')}>
+                  <div className={'max-w-[80%] px-4 py-2.5 text-sm leading-relaxed rounded-2xl '+(m.role==='user'||m.direction==='incoming'?'bg-gray-100 text-gray-800 rounded-tl-sm':'bg-[#0084c7]/80 text-white rounded-tr-sm')}>
+                    <p>{m.content}</p>
+                    <p className={'text-[10px] mt-1 '+(m.role==='user'||m.direction==='incoming'?'text-gray-400':'text-blue-200')}>{fmtTime(m.created_at)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="px-5 py-3 border-t border-gray-100 text-center text-xs text-gray-400">
+              Apenas visualização — cliente não vê confirmação de leitura
             </div>
           </div>
         </div>

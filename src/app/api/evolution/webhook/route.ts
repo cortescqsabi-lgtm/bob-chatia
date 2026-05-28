@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
               channel_identifier: phone,
               contact_name: pushName || null,
               last_message_at: new Date().toISOString(),
-              status: 'active'
+              status: 'waiting'
             })
             .select()
             .single();

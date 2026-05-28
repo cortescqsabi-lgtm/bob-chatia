@@ -58,3 +58,13 @@ export async function POST(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ data, success: true });
 }
+
+export async function PATCH(req: NextRequest) {
+  const supabase = getSupabaseAdmin();
+  const body = await req.json();
+  const { id, status } = body;
+  if (!id || !status) return NextResponse.json({ error: 'id and status required' }, { status: 400 });
+  const { data, error } = await supabase.from('conversations').update({ status }).eq('id', id).select().single();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ data, success: true });
+}
