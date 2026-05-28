@@ -62,41 +62,25 @@ export async function POST(req: NextRequest) {
         evoRes = await fetch(`${evoUrl}/message/sendMedia/b2zap`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
-          body: JSON.stringify({
-            number,
-            options: { delay: 1200, presence: 'composing' },
-            mediaMessage: { mediatype: 'image', media: media_url, caption: content || '' }
-          })
+          body: JSON.stringify({ number, mediatype: 'image', media: media_url, caption: content || '' })
         });
       } else if (type === 'video') {
         evoRes = await fetch(`${evoUrl}/message/sendMedia/b2zap`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
-          body: JSON.stringify({
-            number,
-            options: { delay: 1200, presence: 'composing' },
-            mediaMessage: { mediatype: 'video', media: media_url, caption: content || '' }
-          })
+          body: JSON.stringify({ number, mediatype: 'video', media: media_url, caption: content || '' })
         });
       } else if (type === 'audio') {
-        evoRes = await fetch(`${evoUrl}/message/sendAudio/b2zap`, {
+        evoRes = await fetch(`${evoUrl}/message/sendWhatsAppAudio/b2zap`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
-          body: JSON.stringify({
-            number,
-            audio: media_url,
-            options: { delay: 1200, presence: 'composing' }
-          })
+          body: JSON.stringify({ number, audio: media_url })
         });
       } else {
         evoRes = await fetch(`${evoUrl}/message/sendText/b2zap`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
-          body: JSON.stringify({
-            number,
-            options: { delay: 1200, presence: 'composing' },
-            textMessage: { text: content }
-          })
+          body: JSON.stringify({ number, text: content })
         });
       }
 
