@@ -36,6 +36,8 @@ const S: Record<string,string> = {
   x:'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
   edit:'<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
   trash:'<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+  play:'<polygon points="5 3 19 12 5 21 5 3"/>',
+  pause:'<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>',
 };
 function Icon({ n, s = 20, c = '' }: { n: string; s?: number; c?: string }) {
   return <svg className={c} width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" dangerouslySetInnerHTML={{ __html: S[n]||'' }} />;
@@ -88,10 +90,16 @@ export default function CrmPage() {
   const [uploading, setUploading] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [recordedBlob, setRecordedBlob] = useState<Blob|null>(null);
+  const [recordingSec, setRecordingSec] = useState(0);
+  const [previewUrl, setPreviewUrl] = useState<string|null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder|null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const emojiRef = useRef<HTMLDivElement>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval>|null>(null);
+  const previewRef = useRef<HTMLAudioElement>(null);
 
   const EMOJIS = ['😀','😁','😂','🤣','😃','😄','😅','😆','😉','😊','😋','😎','😍','🥰','😘','😗','😙','😚','🙂','🤗','🤩','🤔','🤨','😐','😑','😶','🙄','😏','😣','😥','😮','🤐','😯','😪','😫','😴','😌','😛','😜','😝','🤤','😒','😓','😔','😕','🙃','🤑','😲','☹️','🙁','😖','😞','😟','😤','😢','😭','😦','😧','😨','😩','🤯','😬','😰','😱','🥵','🥶','😳','🤪','😵','😡','😠','🤬','👍','👎','👊','✊','🤛','🤜','👏','🙌','👐','🤲','🤝','🙏','✌️','🤞','🤟','🤘','👌','❤️','🧡','💛','💚','💙','💜','🖤','💔','💕','💞','💗','💖','✨','🔥','⭐','🌟','💯','✅','❌','❓','❗','🎉','🎊'];
 
@@ -100,28 +108,48 @@ export default function CrmPage() {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream);
       audioChunksRef.current = [];
+      setRecordingSec(0);
+      setRecordedBlob(null);
+      setPreviewUrl(null);
       recorder.ondataavailable = e => audioChunksRef.current.push(e.data);
-      recorder.onstop = async () => {
+      recorder.onstop = () => {
         const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        const fd = new FormData();
-        fd.append('file', blob, 'recording_'+Date.now()+'.webm');
-        const r = await fetch('/api/media/upload', { method: 'POST', body: fd });
-        const j = await r.json();
-        if (j.success && sel) {
-          setMsgs(p=>[...p,{id:'sending',content:j.url,role:'assistant',created_at:new Date().toISOString(),direction:'outgoing',type:'audio'}]);
-          await fetch('/api/crm/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({conversation_id:sel.id,content:'',type:'audio',media_url:j.url})});
-          loadMsgs(sel.id);
-        }
-        stream.getTracks().forEach(t => t.stop());
+        setRecordedBlob(blob);
+        setPreviewUrl(URL.createObjectURL(blob));
         setIsRecording(false);
+        if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+        stream.getTracks().forEach(t => t.stop());
       };
       recorder.start();
       mediaRecorderRef.current = recorder;
       setIsRecording(true);
+      timerRef.current = setInterval(() => setRecordingSec(s => s + 1), 1000);
     } catch (e) { console.error('Recording error:', e); }
   };
 
   const stopRecording = () => { mediaRecorderRef.current?.stop(); };
+  const cancelRecording = () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setRecordedBlob(null);
+    setPreviewUrl(null);
+    setRecordingSec(0);
+  };
+  const sendAudioBlob = async () => {
+    if (!recordedBlob || !sel) return;
+    const fd = new FormData();
+    fd.append('file', recordedBlob, 'recording_'+Date.now()+'.webm');
+    setUploading(true);
+    const r = await fetch('/api/media/upload', { method: 'POST', body: fd });
+    const j = await r.json();
+    if (j.success) {
+      setMsgs(p=>[...p,{id:'sending',content:j.url,role:'assistant',created_at:new Date().toISOString(),direction:'outgoing',type:'audio'}]);
+      await fetch('/api/crm/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({conversation_id:sel.id,content:'',type:'audio',media_url:j.url})});
+      loadMsgs(sel.id);
+    }
+    setUploading(false);
+    cancelRecording();
+  };
+  const fmtSec = (s: number) => { const m = Math.floor(s/60); return String(m).padStart(2,'0')+':'+String(s%60).padStart(2,'0'); };
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => { if (emojiRef.current && !emojiRef.current.contains(e.target as Node)) setShowEmoji(false); };
@@ -451,26 +479,49 @@ export default function CrmPage() {
                   <div ref={endRef}/>
                 </div>
                 <div className="bg-white border-t border-gray-200 px-5 py-3">
-                  <div className="flex items-center gap-2 bg-gray-50 rounded-2xl border border-gray-200 px-4 py-1.5">
-                    <div className="relative">
-                      <button onClick={()=>setShowEmoji(!showEmoji)} className="text-gray-400 hover:text-gray-600 p-1"><Icon n="emoji" s={20}/></button>
-                      {showEmoji && <div ref={emojiRef} className="absolute bottom-full left-0 mb-2 bg-white border rounded-xl shadow-xl p-2 grid grid-cols-8 gap-1 z-50 w-72 max-h-52 overflow-y-auto">
-                        {EMOJIS.map((e,i) => (
-                          <button key={i} onClick={()=>{setInput(p=>p+e);setShowEmoji(false)}} className="hover:bg-gray-100 rounded p-1 text-lg leading-none">{e}</button>
-                        ))}
-                      </div>}
+                  {recordedBlob && previewUrl ? (
+                    <div className="flex items-center gap-3 bg-gray-50 rounded-2xl border border-gray-200 px-4 py-2">
+                      <button onClick={()=>{if(!isPlaying){previewRef.current?.play();setIsPlaying(true)}else{previewRef.current?.pause();setIsPlaying(false)}}} className="w-9 h-9 rounded-full bg-[#0084c7] text-white flex items-center justify-center hover:bg-[#0070b0]">
+                        {isPlaying ? <Icon n="pause" s={16}/> : <Icon n="play" s={16}/>}
+                      </button>
+                      <audio ref={previewRef} src={previewUrl} onEnded={()=>setIsPlaying(false)} className="hidden" />
+                      <span className="text-sm text-gray-600 font-mono">{fmtSec(recordingSec)}</span>
+                      <div className="flex-1 h-1 bg-gray-200 rounded-full"><div className="h-1 bg-[#0084c7] rounded-full" style={{width:'30%'}}/></div>
+                      <button onClick={sendAudioBlob} disabled={uploading} className="text-green-600 hover:text-green-700 p-1 disabled:opacity-50"><Icon n="check" s={20}/></button>
+                      <button onClick={cancelRecording} className="text-red-400 hover:text-red-600 p-1"><Icon n="trash" s={20}/></button>
                     </div>
-                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*,audio/*" onChange={e=>{const f=e.target.files?.[0];if(f){handleSendMedia(f);e.target.value=''}}} />
-                    <button onClick={()=>fileInputRef.current?.click()} disabled={uploading} className="text-gray-400 hover:text-gray-600 p-1 disabled:opacity-50">{uploading?<span className="text-[10px]">...</span>:<Icon n="attach" s={20}/>}</button>
-                    <button onClick={isRecording?stopRecording:startRecording} className={'p-1 '+(isRecording?'text-red-500 animate-pulse':'text-gray-400 hover:text-gray-600')} title={isRecording?'Parar gravação':'Gravar áudio'}><Icon n={isRecording?'microphone':'microphone'} s={20}/></button>
-                    <input type="text" placeholder={uploading?'Enviando mídia...':'Digite sua mensagem...'} value={input} onChange={e=>setInput(e.target.value)}
-                      onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleSend()}}}
-                      className="flex-1 bg-transparent text-sm outline-none py-1.5 px-2 placeholder:text-gray-300" disabled={uploading} />
-                    <button onClick={handleSend}
-                      className={'w-9 h-9 rounded-full flex items-center justify-center transition '+(input.trim()?'bg-[#0084c7] text-white shadow-sm hover:bg-[#0070b0]':'bg-gray-200 text-gray-400')}>
-                      <Icon n="send" s={17}/>
-                    </button>
-                  </div>
+                  ) : (
+                    <div className="flex items-center gap-2 bg-gray-50 rounded-2xl border border-gray-200 px-4 py-1.5">
+                      <div className="relative">
+                        <button onClick={()=>setShowEmoji(!showEmoji)} className="text-gray-400 hover:text-gray-600 p-1"><Icon n="emoji" s={20}/></button>
+                        {showEmoji && <div ref={emojiRef} className="absolute bottom-full left-0 mb-2 bg-white border rounded-xl shadow-xl p-2 grid grid-cols-8 gap-1 z-50 w-72 max-h-52 overflow-y-auto">
+                          {EMOJIS.map((e,i) => (
+                            <button key={i} onClick={()=>{setInput(p=>p+e);setShowEmoji(false)}} className="hover:bg-gray-100 rounded p-1 text-lg leading-none">{e}</button>
+                          ))}
+                        </div>}
+                      </div>
+                      <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*,audio/*" onChange={e=>{const f=e.target.files?.[0];if(f){handleSendMedia(f);e.target.value=''}}} />
+                      <button onClick={()=>fileInputRef.current?.click()} disabled={uploading} className="text-gray-400 hover:text-gray-600 p-1 disabled:opacity-50">{uploading?<span className="text-[10px]">...</span>:<Icon n="attach" s={20}/>}</button>
+                      {isRecording ? (
+                        <div className="flex-1 flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+                          <span className="text-sm text-red-500 font-medium">Gravando {fmtSec(recordingSec)}</span>
+                          <button onClick={stopRecording} className="ml-auto w-7 h-7 rounded-full bg-red-500 text-white flex items-center justify-center hover:bg-red-600"><Icon n="x" s={14}/></button>
+                        </div>
+                      ) : (
+                        <>
+                          <button onClick={startRecording} className="text-gray-400 hover:text-gray-600 p-1" title="Gravar áudio"><Icon n="microphone" s={20}/></button>
+                          <input type="text" placeholder={uploading?'Enviando mídia...':'Digite sua mensagem...'} value={input} onChange={e=>setInput(e.target.value)}
+                            onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleSend()}}}
+                            className="flex-1 bg-transparent text-sm outline-none py-1.5 px-2 placeholder:text-gray-300" disabled={uploading} />
+                          <button onClick={handleSend}
+                            className={'w-9 h-9 rounded-full flex items-center justify-center transition '+(input.trim()?'bg-[#0084c7] text-white shadow-sm hover:bg-[#0070b0]':'bg-gray-200 text-gray-400')}>
+                            <Icon n="send" s={17}/>
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               </>
             )}
