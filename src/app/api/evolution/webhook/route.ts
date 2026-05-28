@@ -73,11 +73,17 @@ export async function POST(req: NextRequest) {
       return Response.json({ status: 'ok' });
     }
 
+    if (event === 'messages_update') {
+      console.log('MSG_UPDATE FULL:', JSON.stringify(body).substring(0, 2000));
+    }
+
     if (event === 'connection_update') {
       console.log('Connection update:', JSON.stringify(body.data));
     }
 
-    console.log('Webhook event:', event, JSON.stringify(body).substring(0, 200));
+    if (event !== 'messages_upsert') {
+      console.log('Webhook event:', event, JSON.stringify(body).substring(0, 300));
+    }
     return Response.json({ status: 'ok', event });
   } catch (error) {
     console.error('Webhook error:', error);
