@@ -296,7 +296,10 @@ export default function CrmPage() {
                         OK
                       </button>
                     ) : c.status === 'resolved' ? (
-                      <span className="w-5 h-5 rounded-full bg-gray-100 text-gray-400 text-[9px] font-bold flex items-center justify-center">✓</span>
+                      <button onClick={async (e)=>{e.stopPropagation(); await fetch('/api/crm/conversations',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:c.id,status:'attending'})}); loadConvs();}}
+                        className="text-[10px] font-semibold border border-blue-500 text-blue-600 px-1.5 py-0.5 rounded hover:bg-blue-50 transition" title="Reativar conversa">
+                        Reativar
+                      </button>
                     ) : null}
                     <button onClick={e=>{e.stopPropagation();handlePopup(c)}}
                       className="text-blue-400 hover:text-blue-600 transition" title="Visualizar sem marcar como lido">
@@ -330,14 +333,21 @@ export default function CrmPage() {
                     <p className="text-xs text-green-600 font-medium">Online</p>
                   </div>
                   <div className="flex items-center gap-1">
-                    {sel.status !== 'resolved' && sel.status !== 'archived' && sel.status !== 'blocked' && (
+                    {sel.status === 'resolved' ? (
+                      <button onClick={async () => {
+                        await fetch('/api/crm/conversations',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:sel.id,status:'attending'})});
+                        setSel(null); setMsgs([]); loadConvs();
+                      }} className="text-xs font-semibold border border-blue-500 text-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition mr-1">
+                        Reativar
+                      </button>
+                    ) : sel.status !== 'archived' && sel.status !== 'blocked' ? (
                       <button onClick={async () => {
                         await fetch('/api/crm/conversations',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:sel.id,status:'resolved'})});
                         setSel(null); setMsgs([]); loadConvs();
                       }} className="text-xs font-semibold border border-green-500 text-green-600 px-3 py-1.5 rounded-lg hover:bg-green-50 transition mr-1">
                         Finalizar
                       </button>
-                    )}
+                    ) : null}
                     {['phone','video','info','more'].map(i => (
                       <button key={i} className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"><Icon n={i} s={19}/></button>
                     ))}
