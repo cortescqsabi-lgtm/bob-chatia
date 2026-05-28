@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { getSupabase } from '@/lib/supabase';
+import { getSupabaseAdmin } from '@/lib/supabase';
 
 function extractMessageContent(data: any): { text: string; type: string } {
   if (!data.message) return { text: '', type: 'text' };
@@ -19,7 +19,7 @@ function extractPhone(remoteJid: string): string {
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = getSupabase();
+    const supabase = getSupabaseAdmin();
     const body = await req.json();
 
     if (body.event === 'MESSAGES_UPSERT' && body.data?.key) {

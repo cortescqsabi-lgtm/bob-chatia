@@ -10,3 +10,14 @@ export function getSupabase() {
 
   return createClient(url, key);
 }
+
+export function getSupabaseAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url || !key) {
+    throw new Error('Supabase admin not configured. Set SUPABASE_SERVICE_ROLE_KEY');
+  }
+
+  return createClient(url, key);
+}
