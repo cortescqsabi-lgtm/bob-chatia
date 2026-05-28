@@ -283,9 +283,14 @@ export default function CrmPage() {
                         className="w-5 h-5 rounded-full bg-green-500 text-white flex items-center justify-center hover:bg-green-600 transition" title="Aceitar conversa">
                         <Icon n="check" s={12}/>
                       </button>
-                    ) : (
-                      <span className="w-5 h-5 rounded-full bg-green-100 text-green-600 text-[9px] font-bold flex items-center justify-center">OK</span>
-                    )}
+                    ) : c.status === 'attending' ? (
+                      <button onClick={async (e)=>{e.stopPropagation(); await fetch('/api/crm/conversations',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:c.id,status:'resolved'})}); loadConvs();}}
+                        className="text-[10px] font-semibold border border-green-500 text-green-600 px-1.5 py-0.5 rounded hover:bg-green-50 transition" title="Finalizar atendimento">
+                        OK
+                      </button>
+                    ) : c.status === 'resolved' ? (
+                      <span className="w-5 h-5 rounded-full bg-gray-100 text-gray-400 text-[9px] font-bold flex items-center justify-center">✓</span>
+                    ) : null}
                     <button onClick={e=>{e.stopPropagation();handlePopup(c)}}
                       className="text-blue-400 hover:text-blue-600 transition" title="Visualizar sem marcar como lido">
                       <Icon n="eye" s={15}/>
@@ -318,7 +323,7 @@ export default function CrmPage() {
                     <p className="text-xs text-green-600 font-medium">Online</p>
                   </div>
                   <div className="flex items-center gap-1">
-                    {(sel.status === 'attending' || sel.status === 'waiting' || sel.status === 'active') && (
+                    {sel.status !== 'resolved' && sel.status !== 'archived' && sel.status !== 'blocked' && (
                       <button onClick={async () => {
                         await fetch('/api/crm/conversations',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:sel.id,status:'resolved'})});
                         setSel(null); setMsgs([]); loadConvs();
