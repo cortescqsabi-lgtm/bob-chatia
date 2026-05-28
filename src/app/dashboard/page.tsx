@@ -74,10 +74,11 @@ export default function CrmPage() {
     try { const r=await fetch('/api/tags'); const d=await r.json(); setTags(d.data||[]); } catch {}
   }, []);
 
-  const loadConvTags = useCallback(async () => {
+  const loadAllConvTags = useCallback(async () => {
     try {
-      const r=await fetch('/api/tags',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'get_tags',conversation_id:'all'})});
-      // fallback: load individually
+      const r=await fetch('/api/tags',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'get_all_tags'})});
+      const d=await r.json();
+      if (d.data) setConvTags(d.data);
     } catch {}
   }, []);
 
@@ -87,7 +88,7 @@ export default function CrmPage() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { loadConvs(); loadTags(); }, [loadConvs, loadTags]);
+  useEffect(() => { loadConvs(); loadTags(); loadAllConvTags(); }, [loadConvs, loadTags, loadAllConvTags]);
 
   useEffect(() => { endRef.current?.scrollIntoView({behavior:'smooth'}); }, [msgs]);
 
@@ -123,12 +124,12 @@ export default function CrmPage() {
 
   const handleAssignTag = async (convId: string, tagId: string) => {
     await fetch('/api/tags',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'assign',conversation_id:convId,tag_id:tagId})});
-    loadSingleConvTags(convId);
+    loadAllConvTags();
   };
 
   const handleUnassignTag = async (convId: string, tagId: string) => {
     await fetch('/api/tags',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'unassign',conversation_id:convId,tag_id:tagId})});
-    loadSingleConvTags(convId);
+    loadAllConvTags();
   };
 
   const [dragId, setDragId] = useState<string|null>(null);

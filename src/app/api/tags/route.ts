@@ -31,6 +31,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ data: data?.map((r: any) => r.tags) || [] });
   }
 
+  if (action === 'get_all_tags') {
+    const { data } = await supabase.from('conversation_tags').select('conversation_id, tag_id, tags(*)');
+    const grouped: Record<string, any[]> = {};
+    for (const row of data || []) {
+      if (!grouped[row.conversation_id]) grouped[row.conversation_id] = [];
+      grouped[row.conversation_id].push(row.tags);
+    }
+    return NextResponse.json({ data: grouped });
+  }
+
   if (name) {
     const { data, error } = await supabase.from('tags').insert({ tenant_id: TENANT, name, color: color || '#6366f1' }).select().single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
