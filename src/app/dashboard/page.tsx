@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 
 /* ─── Types ─── */
 interface Tag { id: string; name: string; color: string; }
-interface Conversation { id: string; channel_identifier: string; contact_name: string | null; last_message_at: string; status: string; channel_type: string; }
+interface Conversation { id: string; channel_identifier: string; contact_name: string | null; last_message_at: string; status: string; channel_type: string; profile_pic_url?: string; }
 interface Message { id: string; content: string; role: string; created_at: string; direction?: string; type?: string; status?: string; }
 
 /* ─── SVG Icons ─── */
@@ -46,6 +46,13 @@ function StatusIcon({ status, direction, id }: { status?: string; direction?: st
   const one = '\u2713';
   const two = '\u2713\u2713';
   return <span className={c+' text-xs ml-1'}>{status==='delivered'||status==='read'?two:one}</span>;
+}
+function Avatar({ name, url, size = 10 }: { name?: string|null; url?: string|null; size?: number }) {
+  const sz = size >= 11 ? 'w-11 h-11' : size >= 10 ? 'w-10 h-10' : size >= 7 ? 'w-7 h-7' : 'w-9 h-9';
+  const ts = size >= 11 ? 'text-sm' : size >= 10 ? 'text-sm' : size >= 7 ? 'text-[10px]' : 'text-xs';
+  const base = sz+' rounded-full flex-shrink-0';
+  if (url) return <img src={url} alt="" className={base+' object-cover'} />;
+  return <div className={base+' bg-gradient-to-br from-[#0084c7] to-blue-400 flex items-center justify-center text-white font-semibold '+ts}>{(name||'?').charAt(0).toUpperCase()}</div>;
 }
 
 const menuItems = [
@@ -285,9 +292,7 @@ export default function CrmPage() {
               : filtered.map(c => (
                 <button key={c.id} onClick={()=>handleSelect(c)}
                   className={'w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-gray-50 transition border-l-[3px] '+(sel?.id===c.id?'border-l-[#0084c7] bg-blue-50/30':'border-l-transparent')}>
-                  <div className="w-11 h-11 rounded-full bg-gradient-to-br from-[#0084c7] to-blue-400 flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
-                    {(c.contact_name||'?').charAt(0).toUpperCase()}
-                  </div>
+                  <Avatar name={c.contact_name} url={c.profile_pic_url} size={11} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
                       <p className="font-semibold text-sm text-gray-800 truncate">{c.contact_name||fmtPhone(c.channel_identifier)}</p>
@@ -355,9 +360,7 @@ export default function CrmPage() {
               <>
                 <div className="bg-white border-b border-gray-200 px-5 py-3 flex items-center gap-3">
                   <button className="md:hidden mr-1 text-gray-500" onClick={()=>{setMobile(true);setSel(null)}}><Icon n="back" s={20}/></button>
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#0084c7] to-blue-400 flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
-                    {(sel.contact_name||'?').charAt(0).toUpperCase()}
-                  </div>
+                  <Avatar name={sel.contact_name} url={sel.profile_pic_url} size={10} />
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-sm text-gray-800 truncate">{sel.contact_name||fmtPhone(sel.channel_identifier)}</p>
                     <p className="text-xs text-green-600 font-medium">Online</p>
@@ -445,9 +448,7 @@ export default function CrmPage() {
                         className={'bg-white rounded-lg p-3 shadow-sm border border-gray-100 cursor-grab active:cursor-grabbing transition ' + (dragId === c.id ? 'opacity-50 shadow-md rotate-2' : 'hover:shadow-md')}
                         onClick={()=>{setMenu('atendimento');handleSelect(c)}}>
                         <div className="flex items-center gap-2 mb-1">
-                          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#0084c7] to-blue-400 flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
-                            {(c.contact_name||'?').charAt(0).toUpperCase()}
-                          </div>
+                          <Avatar name={c.contact_name} url={c.profile_pic_url} size={7} />
                           <p className="font-semibold text-xs text-gray-800 truncate">{c.contact_name||fmtPhone(c.channel_identifier)}</p>
                         </div>
                         <p className="text-[11px] text-gray-500 truncate">{c.channel_identifier}</p>
@@ -476,9 +477,7 @@ export default function CrmPage() {
                       className={'bg-white rounded-lg p-3 shadow-sm border border-gray-100 cursor-grab active:cursor-grabbing transition ' + (dragId === c.id ? 'opacity-50 shadow-md rotate-2' : 'hover:shadow-md')}
                       onClick={()=>{setMenu('atendimento');handleSelect(c)}}>
                       <div className="flex items-center gap-2 mb-1">
-                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#0084c7] to-blue-400 flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
-                          {(c.contact_name||'?').charAt(0).toUpperCase()}
-                        </div>
+                        <Avatar name={c.contact_name} url={c.profile_pic_url} size={7} />
                         <p className="font-semibold text-xs text-gray-800 truncate">{c.contact_name||fmtPhone(c.channel_identifier)}</p>
                       </div>
                       <p className="text-[11px] text-gray-500 truncate">{c.channel_identifier}</p>
@@ -586,9 +585,7 @@ export default function CrmPage() {
           <div className="bg-white rounded-xl w-full max-w-lg mx-4 shadow-xl max-h-[80vh] flex flex-col" onClick={e=>e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#0084c7] to-blue-400 flex items-center justify-center text-white font-semibold text-sm">
-                  {(popupConv.contact_name||'?').charAt(0).toUpperCase()}
-                </div>
+                <Avatar name={popupConv.contact_name} url={popupConv.profile_pic_url} size={9} />
                 <div>
                   <p className="font-semibold text-sm text-gray-800">{popupConv.contact_name||fmtPhone(popupConv.channel_identifier)}</p>
                   <p className="text-xs text-gray-400">Visualização sem marcação de leitura</p>

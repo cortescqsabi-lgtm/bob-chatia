@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
 
         const { data: existing } = await supabase
           .from('conversations')
-          .select('id, tenant_id')
+          .select('id, tenant_id, status')
           .eq('channel_identifier', phone)
           .eq('channel_type', 'whatsapp')
           .order('last_message_at', { ascending: false })
@@ -65,6 +65,7 @@ export async function POST(req: NextRequest) {
           .maybeSingle();
 
         let conversation = existing;
+        const profilePicUrl = msgData.profilePicUrl || msgData.sender?.profilePicUrl || null;
         if (!conversation) {
           const { data: newConv } = await supabase
             .from('conversations')
@@ -74,7 +75,8 @@ export async function POST(req: NextRequest) {
               channel_identifier: phone,
               contact_name: pushName || null,
               last_message_at: new Date().toISOString(),
-              status: 'waiting'
+              status: 'waiting',
+              profile_pic_url: profilePicUrl
             })
             .select()
             .single();
@@ -84,7 +86,11 @@ export async function POST(req: NextRequest) {
         if (conversation) {
           try { await supabase.from('messages').insert({ conversation_id: conversation.id, tenant_id: conversation.tenant_id, role: 'user', content: text, type: type, direction: 'incoming', ai_generated: false }); } catch (e) { console.error('Insert message error:', e); }
           try { await supabase.from('ai_processing_queue').insert({ conversation_id: conversation.id, message_id: msgId, status: 'pending' }); } catch (e) { console.error('Insert queue error:', e); }
-          try { await supabase.from('conversations').update({ last_message_at: new Date().toISOString() }).eq('id', conversation.id); } catch (e) { console.error('Update conv error:', e); }
+          const updateData: Record<string, any> = { last_message_at: new Date().toISOString() };
+          if (pushName) updateData.contact_name = pushName;
+          if (profilePicUrl) updateData.profile_pic_url = profilePicUrl;
+          if (conversation.status === 'resolved') updateData.status = 'waiting';
+          try { await supabase.from('conversations').update(updateData).eq('id', conversation.id); } catch (e) { console.error('Update conv error:', e); }
         }
       }
 
