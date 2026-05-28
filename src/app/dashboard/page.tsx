@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 
 interface EvoInstance {
   name: string;
@@ -10,24 +10,64 @@ interface EvoInstance {
   instanceId: string;
 }
 
+interface Conversation {
+  id: string;
+  channel_identifier: string;
+  contact_name: string | null;
+  last_message_at: string;
+  status: string;
+  channel_type: string;
+}
+
+interface Message {
+  id: string;
+  content: string;
+  role: string;
+  created_at: string;
+}
+
 export default function DashboardPage() {
   const [instance, setInstance] = useState<EvoInstance | null>(null);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
   const [qrcode, setQrcode] = useState<string | null>(null);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [conversationsLoading, setConversationsLoading] = useState(true);
+  const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [messagesLoading, setMessagesLoading] = useState(false);
 
   const checkStatus = async () => {
     setLoading(true);
     try {
       const r = await fetch('/api/evolution/manage');
       const d = await r.json();
-      if (d.instance) setInstance(d.instance);
-      else setInstance(null);
+      setInstance(d.instance || null);
     } catch { setInstance(null); }
     setLoading(false);
   };
 
-  useEffect(() => { checkStatus(); }, []);
+  const loadConversations = useCallback(async () => {
+    setConversationsLoading(true);
+    try {
+      const r = await fetch('/api/crm/conversations');
+      const d = await r.json();
+      setConversations(d.data || []);
+    } catch { setConversations([]); }
+    setConversationsLoading(false);
+  }, []);
+
+  const loadMessages = async (convId: string) => {
+    setMessagesLoading(true);
+    try {
+      const r = await fetch(`/api/crm/messages?conversation_id=${convId}`);
+      const d = await r.json();
+      setMessages(d.data || []);
+    } catch { setMessages([]); }
+    setMessagesLoading(false);
+  };
+
+  useEffect(() => { checkStatus(); loadConversations(); }, [loadConversations]);
 
   const handleConnect = async () => {
     setConnecting(true);
@@ -41,6 +81,7 @@ export default function DashboardPage() {
       const d = await r.json();
       if (d.connected) {
         await checkStatus();
+        await loadConversations();
       } else if (d.qrcode) {
         setQrcode(d.qrcode);
       }
@@ -56,16 +97,62 @@ export default function DashboardPage() {
     });
     setInstance(null);
     setQrcode(null);
+    setSelectedConv(null);
+    setMessages([]);
+    await loadConversations();
   };
 
   const phoneNumber = instance?.ownerJid?.replace(/@s\.whatsapp\.net$/, '') || '';
   const formattedPhone = phoneNumber ? `+${phoneNumber}` : '';
   const isConnected = instance?.connectionStatus === 'open';
 
+  const formatPhone = (raw: string) => {
+    const digits = raw.replace(/\D/g, '');
+    if (digits.length === 13) return `+${digits.slice(0,2)} (${digits.slice(2,4)}) ${digits.slice(4,9)}-${digits.slice(9)}`;
+    if (digits.length === 12) return `+${digits.slice(0,2)} (${digits.slice(2,4)}) ${digits.slice(4,8)}-${digits.slice(8)}`;
+    return raw;
+  };
+
+  const formatTime = (iso: string) => {
+    const d = new Date(iso);
+    return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
         <p className="text-gray-500">Carregando...</p>
+      </div>
+    );
+  }
+
+  if (selectedConv) {
+    return (
+      <div>
+        <button onClick={() => { setSelectedConv(null); setMessages([]); }}
+          className="text-sm text-blue-600 hover:underline mb-4 block">&larr; Voltar para conversas</button>
+        <div className="bg-white rounded-lg border">
+          <div className="p-4 border-b">
+            <h2 className="font-semibold">{selectedConv.contact_name || formatPhone(selectedConv.channel_identifier)}</h2>
+            <p className="text-xs text-gray-400">{selectedConv.channel_identifier}</p>
+          </div>
+          <div className="p-4 space-y-3 max-h-[500px] overflow-y-auto">
+            {messagesLoading ? (
+              <p className="text-gray-400 text-center py-8">Carregando mensagens...</p>
+            ) : messages.length === 0 ? (
+              <p className="text-gray-400 text-center py-8">Nenhuma mensagem encontrada.</p>
+            ) : (
+              [...messages].reverse().map((m) => (
+                <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
+                  <div className={`max-w-[80%] px-4 py-2 rounded-xl text-sm ${m.role === 'user' ? 'bg-gray-100 text-gray-800' : 'bg-blue-500 text-white'}`}>
+                    <p>{m.content}</p>
+                    <p className={`text-[10px] mt-1 ${m.role === 'user' ? 'text-gray-400' : 'text-blue-100'}`}>{formatTime(m.created_at)}</p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       </div>
     );
   }
@@ -173,18 +260,41 @@ export default function DashboardPage() {
 
       {/* Conversations */}
       <div className="bg-white rounded-lg border">
-        <div className="p-4 border-b">
+        <div className="p-4 border-b flex justify-between items-center">
           <h2 className="font-semibold">Todas as Conversas</h2>
+          <span className="text-xs text-gray-400">{conversations.length} conversas</span>
         </div>
-        <div className="p-8 text-center text-gray-500">
-          <p className="text-4xl mb-4">💬</p>
-          <p>Nenhuma conversa ainda.</p>
-          <p className="text-sm mt-2">
-            {isConnected
-              ? 'As mensagens aparecerao aqui automaticamente quando seus clientes enviarem.'
-              : 'Conecte seu WhatsApp para comecar a receber mensagens.'}
-          </p>
-        </div>
+        {conversationsLoading ? (
+          <div className="p-8 text-center text-gray-400">Carregando conversas...</div>
+        ) : conversations.length === 0 ? (
+          <div className="p-8 text-center text-gray-500">
+            <p className="text-4xl mb-4">💬</p>
+            <p>Nenhuma conversa ainda.</p>
+            <p className="text-sm mt-2">
+              {isConnected
+                ? 'As mensagens aparecerao aqui automaticamente quando seus clientes enviarem.'
+                : 'Conecte seu WhatsApp para comecar a receber mensagens.'}
+            </p>
+          </div>
+        ) : (
+          <div className="divide-y">
+            {conversations.map((conv) => (
+              <button key={conv.id}
+                onClick={() => { setSelectedConv(conv); loadMessages(conv.id); }}
+                className="w-full text-left px-4 py-3 hover:bg-gray-50 transition flex items-center gap-3"
+              >
+                <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center text-sm font-semibold text-gray-600 flex-shrink-0">
+                  {(conv.contact_name || conv.channel_identifier).charAt(0).toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm truncate">{conv.contact_name || formatPhone(conv.channel_identifier)}</p>
+                  <p className="text-xs text-gray-400 truncate">{conv.channel_identifier}</p>
+                </div>
+                <div className="text-xs text-gray-400 flex-shrink-0">{conv.last_message_at ? formatTime(conv.last_message_at) : ''}</div>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
