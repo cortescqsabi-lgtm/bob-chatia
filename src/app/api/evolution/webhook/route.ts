@@ -64,27 +64,9 @@ export async function POST(req: NextRequest) {
         }
 
         if (conversation) {
-          await supabase.from('messages').insert({
-            conversation_id: conversation.id,
-            tenant_id: conversation.tenant_id,
-            role: 'user',
-            content: text,
-            type: type,
-            direction: 'incoming',
-            ai_generated: false
-          }).then(() => {}).catch(e => console.error('Insert message error:', e));
-
-          await supabase.from('ai_processing_queue').insert({
-            conversation_id: conversation.id,
-            message_id: msgId,
-            status: 'pending'
-          }).then(() => {}).catch(e => console.error('Insert queue error:', e));
-
-          await supabase
-            .from('conversations')
-            .update({ last_message_at: new Date().toISOString() })
-            .eq('id', conversation.id)
-            .then(() => {}).catch(e => console.error('Update conv error:', e));
+          try { await supabase.from('messages').insert({ conversation_id: conversation.id, tenant_id: conversation.tenant_id, role: 'user', content: text, type: type, direction: 'incoming', ai_generated: false }); } catch (e) { console.error('Insert message error:', e); }
+          try { await supabase.from('ai_processing_queue').insert({ conversation_id: conversation.id, message_id: msgId, status: 'pending' }); } catch (e) { console.error('Insert queue error:', e); }
+          try { await supabase.from('conversations').update({ last_message_at: new Date().toISOString() }).eq('id', conversation.id); } catch (e) { console.error('Update conv error:', e); }
         }
       }
 
