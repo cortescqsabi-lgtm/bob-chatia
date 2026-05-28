@@ -171,8 +171,11 @@ export default function CrmPage() {
   const untagged = convs.filter(c => !(convTags[c.id]||[]).length);
 
   /* ─── Render ─── */
-  const convsAbertas = convs.filter(c => c.status !== 'resolved');
-  const filtered = convsAbertas.filter(c => {
+  const convsAbertas = convs.filter(c => c.status !== 'resolved' && c.status !== 'archived' && c.status !== 'blocked');
+  const convsResolvidas = convs.filter(c => c.status === 'resolved');
+  const baseList = tab === 'resolvidos' ? convsResolvidas : convsAbertas;
+  const filtered = baseList.filter(c => {
+    if(tab === 'resolvidos') return true;
     if(subtab === 'atendendo') return c.status === 'attending';
     return c.status === 'waiting' || c.status === 'active';
   }).filter(c => {
@@ -215,7 +218,7 @@ export default function CrmPage() {
                   {['abertas','resolvidos'].map(t => (
                     <button key={t} onClick={() => { setTab(t as any); setSel(null); setMsgs([]); }}
                       className={'text-xs font-semibold px-3 py-1.5 rounded-md transition '+(tab===t?'bg-[#e8f0fe] text-[#0084c7]':'text-gray-500 hover:text-gray-700')}>
-                      {t==='abertas'?'ABERTAS ('+convs.filter(c=>c.status!=='resolved').length+')':'RESOLVIDOS'}
+                      {t==='abertas'?'ABERTAS ('+convsAbertas.length+')':'RESOLVIDOS ('+convsResolvidas.length+')'}
                     </button>
                   ))}
                 </div>
@@ -226,6 +229,7 @@ export default function CrmPage() {
                 <div className="flex items-center gap-1 text-xs text-gray-400 border border-gray-200 rounded-lg px-2.5 py-1.5"><Icon n="filter" s={14}/><span>Filas</span></div>
               </div>
             </div>
+            {tab !== 'resolvidos' && (
             <div className="flex border-b border-gray-100">
               {['aguardando','atendendo'].map(s => (
                 <button key={s} onClick={() => setSubtab(s as any)}
@@ -235,6 +239,7 @@ export default function CrmPage() {
                 </button>
               ))}
             </div>
+            )}
             <div className="px-4 py-2">
               <div className="relative">
                 <Icon n="search" s={15} c="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
