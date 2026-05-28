@@ -4,7 +4,7 @@ import OpenAI from 'openai';
 
 export async function POST(req: NextRequest) {
   try {
-    const { query, tenant_id, top_k = 5, threshold = 0.75 } = await req.json();
+    const { query, tenant_id, top_k = 5, threshold = 0.5 } = await req.json();
 
     if (!query || !tenant_id) {
       return Response.json({ error: 'query and tenant_id required' }, { status: 400 });

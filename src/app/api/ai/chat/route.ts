@@ -12,7 +12,7 @@ async function getTenantAIConfig(tenantId: string) {
   return data || null;
 }
 
-async function retrieveContext(tenantId: string, query: string, topK = 5, threshold = 0.7) {
+async function retrieveContext(tenantId: string, query: string, topK = 5, threshold = 0.5) {
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const embedding = await openai.embeddings.create({
     model: 'text-embedding-3-small',
