@@ -52,53 +52,60 @@ export async function POST(req: NextRequest) {
   if (msgErr) return NextResponse.json({ error: msgErr.message }, { status: 500 });
 
   const evoUrl = 'https://b2zap-evolution-api.yagj5r.easypanel.host';
-  const evoKey = process.env.EVOLUTION_API_KEY;
-  if (evoKey) {
-    try {
-      let evoRes: Response;
-      const number = conv.channel_identifier;
+  const evoKey = process.env.EVOLUTION_API_KEY || '429683C4C977415CAAFCCE10F7D57E11';
 
-      if (type === 'image') {
-        evoRes = await fetch(`${evoUrl}/message/sendMedia/b2zap`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
-          body: JSON.stringify({ number, mediatype: 'image', media: media_url, caption: content || '' })
-        });
-      } else if (type === 'video') {
-        evoRes = await fetch(`${evoUrl}/message/sendMedia/b2zap`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
-          body: JSON.stringify({ number, mediatype: 'video', media: media_url, caption: content || '' })
-        });
-      } else if (type === 'audio') {
-        evoRes = await fetch(`${evoUrl}/message/sendWhatsAppAudio/b2zap`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
-          body: JSON.stringify({ number, audio: media_url })
-        });
-      } else {
-        evoRes = await fetch(`${evoUrl}/message/sendText/b2zap`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
-          body: JSON.stringify({ number, text: content })
-        });
-      }
+  try {
+    let evoRes: Response;
+    const number = conv.channel_identifier;
+    const instance = 'b2zap';
 
-      const evoData = evoRes.ok ? await evoRes.json().catch(()=>({})) : null;
-
-      if (evoRes.ok && evoData?.key?.id) {
-        await supabase.from('messages').update({ evolution_msg_id: evoData.key.id }).eq('id', msg.id);
-      } else if (!evoRes.ok) {
-        const txt = await evoRes.text();
-        console.error('Evolution send failed:', evoRes.status, txt);
-        await supabase.from('messages').update({ status: 'failed' }).eq('id', msg.id);
-      }
-    } catch (e) {
-      console.error('Evolution send error:', e);
-      await supabase.from('messages').update({ status: 'failed' }).eq('id', msg.id);
+    if (type === 'image') {
+      evoRes = await fetch(`${evoUrl}/message/sendMedia/${instance}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
+        body: JSON.stringify({ number, mediatype: 'image', media: media_url, caption: content || '' })
+      });
+    } else if (type === 'video') {
+      evoRes = await fetch(`${evoUrl}/message/sendMedia/${instance}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
+        body: JSON.stringify({ number, mediatype: 'video', media: media_url, caption: content || '' })
+      });
+    } else if (type === 'audio') {
+      evoRes = await fetch(`${evoUrl}/message/sendWhatsAppAudio/${instance}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
+        body: JSON.stringify({ number, audio: media_url })
+      });
+    } else {
+      evoRes = await fetch(`${evoUrl}/message/sendText/${instance}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
+        body: JSON.stringify({ number, text: content })
+      });
     }
+
+    const evoData = evoRes.ok ? await evoRes.json().catch(()=>({})) : null;
+
+    if (evoRes.ok && evoData?.key?.id) {
+      await supabase.from('messages').update({ evolution_msg_id: evoData.key.id }).eq('id', msg.id);
+    } else if (!evoRes.ok) {
+      const txt = await evoRes.text().catch(()=>'');
+      console.error('Evolution send failed:', evoRes.status, txt);
+      await supabase.from('messages').update({ status: 'failed' }).eq('id', msg.id);
+    } else {
+      console.error('Evolution response missing key.id:', JSON.stringify(evoData));
+    }
+  } catch (e) {
+    console.error('Evolution send error:', e);
+    await supabase.from('messages').update({ status: 'failed' }).eq('id', msg.id);
   }
 
   const { data: updatedMsg } = await supabase.from('messages').select('*').eq('id', msg.id).single();
+
+  if (updatedMsg?.status === 'failed') {
+    return NextResponse.json({ success: false, error: 'Falha ao enviar mensagem via WhatsApp', data: updatedMsg }, { status: 502 });
+  }
+
   return NextResponse.json({ success: true, data: updatedMsg || msg });
 }
