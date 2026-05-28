@@ -100,7 +100,11 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      if (!evoRes.ok) {
+      const evoData = evoRes.ok ? await evoRes.json().catch(()=>({})) : null;
+
+      if (evoRes.ok && evoData?.key?.id) {
+        await supabase.from('messages').update({ evolution_msg_id: evoData.key.id }).eq('id', msg.id);
+      } else if (!evoRes.ok) {
         const txt = await evoRes.text();
         console.error('Evolution send failed:', evoRes.status, txt);
         await supabase.from('messages').update({ status: 'failed' }).eq('id', msg.id);
@@ -111,5 +115,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ success: true, data: msg });
+  const { data: updatedMsg } = await supabase.from('messages').select('*').eq('id', msg.id).single();
+  return NextResponse.json({ success: true, data: updatedMsg || msg });
 }

@@ -78,16 +78,25 @@ export async function POST(req: NextRequest) {
     }
 
     if (event === 'messages_update') {
-      console.log('MSG_UPDATE FULL:', JSON.stringify(body).substring(0, 2000));
+      const data = body.data || body;
+      const items = Array.isArray(data) ? data : [data];
+      for (const item of items) {
+        const key = item.key || item.key;
+        const update = item.update || {};
+        if (!key?.id) continue;
+        const statusMap: Record<string, string> = { 'SERVER_ACK': 'sent', 'DELIVERY_ACK': 'delivered', 'READ': 'read' };
+        const newStatus = statusMap[update.status] || (typeof update.status === 'number' ? (['sent','sent','delivered','read'][update.status]) : null);
+        if (newStatus) {
+          await supabase.from('messages').update({ status: newStatus }).eq('evolution_msg_id', key.id);
+        }
+      }
+      return Response.json({ status: 'ok' });
     }
 
     if (event === 'connection_update') {
-      console.log('Connection update:', JSON.stringify(body.data));
+      return Response.json({ status: 'ok' });
     }
 
-    if (event !== 'messages_upsert') {
-      console.log('Webhook event:', event, JSON.stringify(body).substring(0, 300));
-    }
     return Response.json({ status: 'ok', event });
   } catch (error) {
     console.error('Webhook error:', error);

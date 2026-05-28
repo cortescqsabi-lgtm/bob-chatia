@@ -5,7 +5,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 /* ─── Types ─── */
 interface Tag { id: string; name: string; color: string; }
 interface Conversation { id: string; channel_identifier: string; contact_name: string | null; last_message_at: string; status: string; channel_type: string; }
-interface Message { id: string; content: string; role: string; created_at: string; direction?: string; type?: string; }
+interface Message { id: string; content: string; role: string; created_at: string; direction?: string; type?: string; status?: string; }
 
 /* ─── SVG Icons ─── */
 const S: Record<string,string> = {
@@ -38,6 +38,14 @@ const S: Record<string,string> = {
 };
 function Icon({ n, s = 20, c = '' }: { n: string; s?: number; c?: string }) {
   return <svg className={c} width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" dangerouslySetInnerHTML={{ __html: S[n]||'' }} />;
+}
+function StatusIcon({ status, direction, id }: { status?: string; direction?: string; id?: string }) {
+  if (direction !== 'outgoing' || String(id||'').startsWith('sending')) return null;
+  const c = status==='read' ? 'text-blue-400' : 'text-gray-400';
+  if (status==='failed') return <span className="text-red-400 text-xs ml-1">!</span>;
+  const one = '\u2713';
+  const two = '\u2713\u2713';
+  return <span className={c+' text-xs ml-1'}>{status==='delivered'||status==='read'?two:one}</span>;
 }
 
 const menuItems = [
@@ -389,7 +397,7 @@ export default function CrmPage() {
                         ) : (
                           <p>{m.content}</p>
                         )}
-                        <p className={'text-[10px] mt-1.5 '+(m.role==='user'||m.direction==='incoming'?'text-gray-400':'text-blue-200')}>{fmtTime(m.created_at)}</p>
+                        <p className={'text-[10px] mt-1.5 '+(m.role==='user'||m.direction==='incoming'?'text-gray-400':'text-blue-200')}>{fmtTime(m.created_at)}<StatusIcon status={m.status} direction={m.direction} id={m.id}/></p>
                       </div>
                     </div>
                   ))}
