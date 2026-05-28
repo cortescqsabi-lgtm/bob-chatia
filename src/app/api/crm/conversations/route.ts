@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
   const { data, error, count } = await supabase
     .from('conversations')
     .select('*', { count: 'exact' })
+    .not('channel_identifier', 'like', '120363%')
     .range(from, from + limit - 1)
     .order('last_message_at', { ascending: false });
 
@@ -29,8 +30,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  const individual = (data || []).filter(c => c.channel_identifier.length <= 14);
+
   return NextResponse.json({
-    data: data || [],
+    data: individual,
     meta: { total: count || 0, page, limit, has_more: (count || 0) > page * limit }
   });
 }

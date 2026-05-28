@@ -17,6 +17,10 @@ function extractPhone(remoteJid: string): string {
   return remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/\D/g, '');
 }
 
+function isGroup(remoteJid: string): boolean {
+  return remoteJid.endsWith('@g.us') || /^\d{15,}/.test(remoteJid.replace(/@\w+\.\w+$/, '').replace(/\D/g, ''));
+}
+
 export async function POST(req: NextRequest) {
   try {
     const supabase = getSupabaseAdmin();
@@ -35,7 +39,7 @@ export async function POST(req: NextRequest) {
         const msgId = key.id || '';
         const { text, type } = extractMessageContent(msgData);
 
-        if (!phone || isFromMe || !text) continue;
+        if (!phone || isFromMe || !text || isGroup(remoteJid)) continue;
 
         const { data: existing } = await supabase
           .from('conversations')
