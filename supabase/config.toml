@@ -1,0 +1,21 @@
+[project]
+name = "multichat-ai"
+plan = "pro"
+region = "us-east-1"
+
+[auth]
+enabled = true
+sessions_inactivity_timeout = 86400
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "auth"]
+extra_search_path = ["public"]
+
+[db]
+port = 54322
+superuser = "postgres"
+
+[analytics]
+enabled = true
