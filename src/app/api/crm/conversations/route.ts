@@ -2,16 +2,21 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase, getSupabaseAdmin } from '@/lib/supabase';
 
 export async function GET(req: NextRequest) {
-  const supabase = getSupabase();
+  const supabase = getSupabaseAdmin();
   const { searchParams } = new URL(req.url);
   const page = parseInt(searchParams.get('page') || '1');
   const limit = parseInt(searchParams.get('limit') || '20');
   const from = (page - 1) * limit;
 
   if (searchParams.get('type') === 'channels') {
-    const admin = getSupabaseAdmin();
-    const { data } = await admin.from('channels').select('*').order('created_at', { ascending: false });
+    const { data } = await supabase.from('channels').select('*').order('created_at', { ascending: false });
     return NextResponse.json({ data: data || [] });
+  }
+
+  if (searchParams.get('type') === 'counts') {
+    const { count: total } = await supabase.from('conversations').select('*', { count: 'exact', head: true });
+    const { count: active } = await supabase.from('conversations').select('*', { count: 'exact', head: true }).eq('status', 'active');
+    return NextResponse.json({ total: total || 0, active: active || 0 });
   }
 
   const { data, error, count } = await supabase
@@ -26,7 +31,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     data: data || [],
-    meta: { total: count || 0, page, limit, has_more: (count || 0) > limit }
+    meta: { total: count || 0, page, limit, has_more: (count || 0) > page * limit }
   });
 }
 

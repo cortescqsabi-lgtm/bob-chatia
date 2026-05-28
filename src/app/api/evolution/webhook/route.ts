@@ -22,7 +22,8 @@ export async function POST(req: NextRequest) {
     const supabase = getSupabaseAdmin();
     const body = await req.json();
 
-    if (body.event === 'MESSAGES_UPSERT' && body.data?.key) {
+    const event = body.event?.toLowerCase().replace('.', '_');
+    if (event === 'messages_upsert' && body.data?.key) {
       const { key, message, pushName } = body.data;
       const remoteJid = key.remoteJid || '';
       const phone = extractPhone(remoteJid);
