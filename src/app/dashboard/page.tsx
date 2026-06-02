@@ -213,6 +213,7 @@ export default function CrmPage() {
   const [pStock, setPStock] = useState('');
   const [pImage, setPImage] = useState('');
   const [pActive, setPActive] = useState(true);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [productImporting, setProductImporting] = useState(false);
   const [productImportStatus, setProductImportStatus] = useState('');
   const [productImportPreview, setProductImportPreview] = useState<any[]>([]);
@@ -409,6 +410,39 @@ export default function CrmPage() {
     } else {
       const errData = await r.json().catch(() => ({}));
       alert('Erro ao salvar produto: ' + (errData.error || 'Erro interno do servidor. Verifique se executou a migration SQL no painel do Supabase.'));
+    }
+  };
+
+  const handleUploadImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingImage(true);
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const tid = getTenantId();
+      const headers: Record<string, string> = {};
+      if (tid) headers['x-tenant-id'] = tid;
+
+      const r = await fetch('/api/media/upload', {
+        method: 'POST',
+        headers,
+        body: formData,
+      });
+
+      const data = await r.json();
+      if (r.ok && data.url) {
+        setPImage(data.url);
+      } else {
+        alert('Erro ao fazer upload: ' + (data.error || 'Erro desconhecido'));
+      }
+    } catch (err) {
+      alert('Erro de conexão ao enviar imagem.');
+    } finally {
+      setUploadingImage(false);
+      e.target.value = '';
     }
   };
 
@@ -1772,8 +1806,27 @@ export default function CrmPage() {
                   </div>
                   <div className="col-span-2">
                     <label className="text-xs font-semibold text-gray-500 mb-1 block">Foto do Produto (URL)</label>
-                    <input type="text" value={pImage} onChange={e => setPImage(e.target.value)}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#0084c7]/20" placeholder="Ex: https://meusite.com.br/fotos/camiseta.jpg"/>
+                    <div className="flex gap-2">
+                      <input type="text" value={pImage} onChange={e => setPImage(e.target.value)}
+                        className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#0084c7]/20" placeholder="Ex: https://meusite.com.br/fotos/camiseta.jpg"/>
+                      <label className="flex items-center justify-center bg-gray-50 hover:bg-gray-150 border border-gray-200 hover:border-gray-300 rounded-lg px-3 cursor-pointer text-gray-600 transition min-w-[42px] relative">
+                        {uploadingImage ? (
+                          <span className="w-4 h-4 border-2 border-[#0084c7] border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                          </svg>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleUploadImage}
+                          disabled={uploadingImage}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
                   </div>
                   <label className="flex items-center gap-2 cursor-pointer col-span-2">
                     <input type="checkbox" checked={pActive} onChange={e => setPActive(e.target.checked)} className="w-4 h-4 accent-[#0084c7]"/>

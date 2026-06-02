@@ -11,6 +11,15 @@ export default function SettingsPage() {
   const [channels, setChannels] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Storage Settings States
+  const [storageProvider, setStorageProvider] = useState<'supabase' | 'gcs'>('supabase');
+  const [gcsBucketName, setGcsBucketName] = useState('');
+  const [gcsProjectId, setGcsProjectId] = useState('');
+  const [gcsClientEmail, setGcsClientEmail] = useState('');
+  const [gcsPrivateKey, setGcsPrivateKey] = useState('');
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [savingStorage, setSavingStorage] = useState(false);
+
   // User management states
   const [users, setUsers] = useState<any[]>([]);
   const [userModal, setUserModal] = useState(false);
@@ -136,12 +145,14 @@ export default function SettingsPage() {
           setCurrentUser(updated);
           localStorage.setItem('userRole', updated.role);
           checkWhatsappStatus(updated.tenant_id);
+          loadTenantSettings(updated.tenant_id);
         } else if (d.data.length > 0) {
           const updated = { ...d.data[0], tenant_id: sessionTenantId };
           setCurrentUser(updated);
           localStorage.setItem('userRole', updated.role);
           localStorage.setItem('currentUser', JSON.stringify(updated));
           checkWhatsappStatus(updated.tenant_id);
+          loadTenantSettings(updated.tenant_id);
         }
       }
     } catch {}
@@ -211,6 +222,119 @@ export default function SettingsPage() {
     if (r.ok) loadUsers();
   };
 
+  const loadTenantSettings = async (tId: string) => {
+    try {
+      const res = await fetch('/api/tenant', {
+        headers: { 'x-tenant-id': tId }
+      });
+      const d = await res.json();
+      if (d.data) {
+        setSettings({
+          tenantName: d.data.name || '',
+          timezone: d.data.timezone || 'America/Sao_Paulo',
+          language: d.data.language || 'pt-BR'
+        });
+        const sc = d.data.storage_config || { provider: 'supabase' };
+        setStorageProvider(sc.provider || 'supabase');
+        if (sc.gcs) {
+          setGcsBucketName(sc.gcs.bucketName || '');
+          setGcsProjectId(sc.gcs.projectId || '');
+          setGcsClientEmail(sc.gcs.clientEmail || '');
+          setGcsPrivateKey(sc.gcs.privateKey || '');
+        } else {
+          setGcsBucketName('');
+          setGcsProjectId('');
+          setGcsClientEmail('');
+          setGcsPrivateKey('');
+        }
+      }
+    } catch (e) {
+      console.error('Erro ao carregar configurações do tenant:', e);
+    }
+  };
+
+  const handleSaveGeneralSettings = async () => {
+    if (!currentUser) return;
+    setSavingSettings(true);
+    try {
+      const res = await fetch('/api/tenant', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': currentUser.tenant_id
+        },
+        body: JSON.stringify({
+          name: settings.tenantName,
+          timezone: settings.timezone,
+          language: settings.language,
+          storage_config: {
+            provider: storageProvider,
+            gcs: {
+              bucketName: gcsBucketName,
+              projectId: gcsProjectId,
+              clientEmail: gcsClientEmail,
+              privateKey: gcsPrivateKey
+            }
+          }
+        })
+      });
+      if (res.ok) {
+        alert('Configurações gerais salvas com sucesso!');
+      } else {
+        const err = await res.json();
+        alert('Erro ao salvar configurações: ' + (err.error || 'Erro desconhecido'));
+      }
+    } catch (e) {
+      alert('Erro ao se conectar com o servidor.');
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const handleSaveStorageConfig = async () => {
+    if (!currentUser) return;
+    if (storageProvider === 'gcs') {
+      if (!gcsBucketName.trim() || !gcsProjectId.trim() || !gcsClientEmail.trim() || !gcsPrivateKey.trim()) {
+        alert('Todos os campos do Google Cloud Storage são obrigatórios.');
+        return;
+      }
+    }
+    setSavingStorage(true);
+    try {
+      const res = await fetch('/api/tenant', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': currentUser.tenant_id
+        },
+        body: JSON.stringify({
+          name: settings.tenantName,
+          timezone: settings.timezone,
+          language: settings.language,
+          storage_config: {
+            provider: storageProvider,
+            gcs: {
+              bucketName: gcsBucketName.trim(),
+              projectId: gcsProjectId.trim(),
+              clientEmail: gcsClientEmail.trim(),
+              privateKey: gcsPrivateKey.trim()
+            }
+          }
+        })
+      });
+      if (res.ok) {
+        alert('Configurações de armazenamento salvas com sucesso!');
+      } else {
+        const err = await res.json();
+        alert('Erro ao salvar configurações: ' + (err.error || 'Erro desconhecido'));
+      }
+    } catch (e) {
+      alert('Erro ao se conectar com o servidor.');
+    } finally {
+      setSavingStorage(false);
+    }
+  };
+
   const handleSwitchSimulatorUser = (userId: string) => {
     const found = users.find(u => u.id === userId);
     if (found) {
@@ -218,6 +342,8 @@ export default function SettingsPage() {
       localStorage.setItem('userRole', found.role);
       localStorage.setItem('currentUser', JSON.stringify(found));
       window.dispatchEvent(new Event('storage'));
+      checkWhatsappStatus(found.tenant_id || '00000000-0000-0000-0000-000000000001');
+      loadTenantSettings(found.tenant_id || '00000000-0000-0000-0000-000000000001');
       alert(`Perfil simulado alterado para: ${found.name} (${found.role === 'admin' ? 'Administrador' : 'Vendedor'})`);
     }
   };
@@ -262,7 +388,7 @@ export default function SettingsPage() {
       {/* General Settings */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 mb-6">
         <h2 className="font-bold text-base text-gray-800 mb-4">Geral</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
           <div>
             <label className="block text-xs font-semibold text-gray-400 mb-1 uppercase">Nome da Empresa</label>
             <input type="text" value={settings.tenantName} onChange={e=>setSettings(p=>({...p, tenantName: e.target.value}))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#0084c7]/20" />
@@ -281,6 +407,112 @@ export default function SettingsPage() {
               <option value="en">English</option>
             </select>
           </div>
+        </div>
+        <div className="flex justify-end pt-2 border-t border-gray-50">
+          <button
+            onClick={handleSaveGeneralSettings}
+            disabled={savingSettings}
+            className="bg-[#0084c7] hover:bg-[#0070b0] text-white font-semibold text-xs px-4 py-2.5 rounded-lg transition disabled:opacity-60"
+          >
+            {savingSettings ? 'Salvando...' : 'Salvar Configurações Gerais'}
+          </button>
+        </div>
+      </div>
+
+      {/* Storage Settings */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 mb-6">
+        <h2 className="font-bold text-base text-gray-800 mb-1">Configurações de Armazenamento</h2>
+        <p className="text-xs text-gray-400 mb-4">Escolha onde serão armazenadas as fotos de produtos cadastradas no sistema.</p>
+        
+        <div className="space-y-4">
+          <div className="flex flex-col md:flex-row gap-4">
+            <label className="flex items-center gap-2 cursor-pointer bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 flex-1 hover:bg-gray-100 transition">
+              <input
+                type="radio"
+                name="storageProvider"
+                value="supabase"
+                checked={storageProvider === 'supabase'}
+                onChange={() => setStorageProvider('supabase')}
+                className="w-4 h-4 accent-[#0084c7]"
+              />
+              <div>
+                <span className="text-sm font-semibold text-gray-800 block">Supabase Storage (Padrão)</span>
+                <span className="text-xs text-gray-400">Armazena no bucket de mídia integrado ao sistema.</span>
+              </div>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 flex-1 hover:bg-gray-100 transition">
+              <input
+                type="radio"
+                name="storageProvider"
+                value="gcs"
+                checked={storageProvider === 'gcs'}
+                onChange={() => setStorageProvider('gcs')}
+                className="w-4 h-4 accent-[#0084c7]"
+              />
+              <div>
+                <span className="text-sm font-semibold text-gray-800 block">Google Cloud Storage (GCS)</span>
+                <span className="text-xs text-gray-400">Armazena em um bucket de sua propriedade.</span>
+              </div>
+            </label>
+          </div>
+
+          {storageProvider === 'gcs' && (
+            <div className="border border-gray-150 rounded-xl p-4 bg-gray-50/50 space-y-4 animate-fadeIn">
+              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">Credenciais do Google Cloud Storage</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1">Nome do Bucket (GCS Bucket Name)</label>
+                  <input
+                    type="text"
+                    value={gcsBucketName}
+                    onChange={e => setGcsBucketName(e.target.value)}
+                    placeholder="Ex: meu-bucket-produtos"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none bg-white focus:ring-2 focus:ring-[#0084c7]/20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1">ID do Projeto (GCP Project ID)</label>
+                  <input
+                    type="text"
+                    value={gcsProjectId}
+                    onChange={e => setGcsProjectId(e.target.value)}
+                    placeholder="Ex: academic-atlas-245709"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none bg-white focus:ring-2 focus:ring-[#0084c7]/20"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-semibold text-gray-500 mb-1">E-mail da Conta de Serviço (Client Email)</label>
+                  <input
+                    type="email"
+                    value={gcsClientEmail}
+                    onChange={e => setGcsClientEmail(e.target.value)}
+                    placeholder="Ex: storage-user@project.iam.gserviceaccount.com"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none bg-white focus:ring-2 focus:ring-[#0084c7]/20"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-semibold text-gray-500 mb-1">Chave Privada (Private Key)</label>
+                  <textarea
+                    value={gcsPrivateKey}
+                    onChange={e => setGcsPrivateKey(e.target.value)}
+                    placeholder="-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC...\n-----END PRIVATE KEY-----"
+                    rows={4}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs outline-none bg-white focus:ring-2 focus:ring-[#0084c7]/20 font-mono"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end pt-4 border-t border-gray-50 mt-4">
+          <button
+            onClick={handleSaveStorageConfig}
+            disabled={savingStorage}
+            className="bg-[#0084c7] hover:bg-[#0070b0] text-white font-semibold text-xs px-4 py-2.5 rounded-lg transition disabled:opacity-60"
+          >
+            {savingStorage ? 'Salvando...' : 'Salvar Configurações de Armazenamento'}
+          </button>
         </div>
       </div>
 
