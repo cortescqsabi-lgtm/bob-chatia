@@ -133,6 +133,9 @@ export default function ProductsPage() {
       setEditProduct(null);
       setPName(''); setPSku(''); setPDesc(''); setPCat(''); setPPrice(''); setPCost(''); setPStock(''); setPImage(''); setPActive(true);
       loadProducts(productSearch, productCategory);
+    } else {
+      const errData = await r.json().catch(() => ({}));
+      alert('Erro ao salvar produto: ' + (errData.error || 'Erro interno do servidor. Verifique se executou a migration SQL no painel do Supabase.'));
     }
   };
 
