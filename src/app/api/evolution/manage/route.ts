@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 
 const EVO_BASE = 'https://b2zap-evolution-api.yagj5r.easypanel.host';
 const EVO_KEY = process.env.EVOLUTION_API_KEY || '429683C4C977415CAAFCCE10F7D57E11';
-const TENANT_ID = '00000000-0000-0000-0000-000000000001';
+const DEFAULT_TENANT_ID = '00000000-0000-0000-0000-000000000001';
 
 async function evoFetch(path: string, options: any = {}) {
   const url = EVO_BASE + path;
@@ -12,46 +12,66 @@ async function evoFetch(path: string, options: any = {}) {
   return { status: r.status, data };
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const rawTenant = req.headers.get('x-tenant-id');
+  const tenantId = (!rawTenant || rawTenant === 'undefined' || rawTenant === 'null') ? DEFAULT_TENANT_ID : rawTenant;
+  const instanceName = `instance_${tenantId}`;
+
   const { data } = await evoFetch('/instance/fetchInstances');
   const instances = Array.isArray(data) ? data : [];
 
-  const b2zap = instances.find((i: any) => i.name === 'b2zap');
+  const inst = instances.find((i: any) => i.name === instanceName);
   return Response.json({
-    exists: !!b2zap,
-    connected: b2zap?.connectionStatus === 'open',
-    instance: b2zap || null,
+    exists: !!inst,
+    connected: inst?.connectionStatus === 'open',
+    instance: inst || null,
     instances
   });
 }
 
 export async function POST(req: NextRequest) {
   try {
+    const rawTenant = req.headers.get('x-tenant-id');
+    const tenantId = (!rawTenant || rawTenant === 'undefined' || rawTenant === 'null') ? DEFAULT_TENANT_ID : rawTenant;
+    const instanceName = `instance_${tenantId}`;
+    const origin = req.nextUrl.origin;
+    const webhookUrl = `${origin}/api/evolution/webhook`;
+
     const { action } = await req.json();
 
     if (action === 'connect') {
       const { data: existing } = await evoFetch('/instance/fetchInstances');
       const instances = Array.isArray(existing) ? existing : [];
-      let instance = instances.find((i: any) => i.name === 'b2zap');
+      let inst = instances.find((i: any) => i.name === instanceName);
 
-      if (instance) {
-        if (instance.connectionStatus === 'open') {
-          await evoFetch('/webhook/set/b2zap', {
+      if (inst) {
+        if (inst.connectionStatus === 'open') {
+          await evoFetch(`/webhook/set/${instanceName}`, {
             method: 'POST',
-            body: JSON.stringify({ webhook: { url: 'https://bob-chatia.vercel.app/api/evolution/webhook', enabled: true } })
+            body: JSON.stringify({ webhook: { url: webhookUrl, enabled: true } })
           });
           return Response.json({ connected: true, qrcode: null, message: 'Ja conectado' });
         }
-        await evoFetch('/instance/delete/b2zap', { method: 'DELETE' });
+        await evoFetch(`/instance/delete/${instanceName}`, { method: 'DELETE' });
       }
 
       const { status, data } = await evoFetch('/instance/create', {
         method: 'POST',
         body: JSON.stringify({
-          instanceName: 'b2zap',
+          instanceName,
           integration: 'WHATSAPP-BAILEYS',
           qrcode: true,
-          webhook: { url: 'https://bob-chatia.vercel.app/api/evolution/webhook', enabled: true }
+          webhook: {
+            url: webhookUrl,
+            enabled: true,
+            events: [
+              'MESSAGES_UPSERT',
+              'MESSAGES_UPDATE',
+              'MESSAGES_DELETE',
+              'SEND_MESSAGE',
+              'CONNECTION_UPDATE'
+            ]
+          }
         })
       });
 
@@ -63,12 +83,12 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'disconnect') {
-      const { status } = await evoFetch('/instance/delete/b2zap', { method: 'DELETE' });
+      const { status } = await evoFetch(`/instance/delete/${instanceName}`, { method: 'DELETE' });
       return Response.json({ disconnected: status === 200 });
     }
 
     if (action === 'status') {
-      const { data: state } = await evoFetch('/instance/connectionState/b2zap');
+      const { data: state } = await evoFetch(`/instance/connectionState/${instanceName}`);
       return Response.json({ state: state?.instance || null });
     }
 

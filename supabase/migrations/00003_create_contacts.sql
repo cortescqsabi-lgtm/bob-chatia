@@ -27,7 +27,7 @@ SELECT DISTINCT ON (c.contact_phone)
   COALESCE(c.contact_name, 'Unknown'),
   c.contact_phone,
   c.contact_email,
-  c.profile_pic_url,
+  c.avatar_url,
   c.channel_type
 FROM conversations c
 WHERE c.contact_phone IS NOT NULL AND c.contact_phone != ''

@@ -22,6 +22,11 @@ CREATE TABLE IF NOT EXISTS tenants (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Default Tenant
+INSERT INTO tenants (id, name, slug, plan, monthly_limit, status)
+VALUES ('00000000-0000-0000-0000-000000000001', 'Default Tenant', 'default', 'free', 100, 'active')
+ON CONFLICT (id) DO NOTHING;
+
 -- ============================================================
 -- USERS (extends Supabase auth.users)
 -- ============================================================
@@ -87,7 +92,7 @@ CREATE TABLE IF NOT EXISTS messages (
   tenant_id UUID REFERENCES tenants(id),
   role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
   content TEXT NOT NULL,
-  type TEXT DEFAULT 'text' CHECK (type IN ('text', 'image', 'document', 'location', 'sticker')),
+  type TEXT DEFAULT 'text' CHECK (type IN ('text', 'image', 'document', 'location', 'sticker', 'audio', 'video')),
   media_url TEXT,
   caption TEXT,
   status TEXT DEFAULT 'sent' CHECK (status IN ('sent', 'delivered', 'read', 'failed')),

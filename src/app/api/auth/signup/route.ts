@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabase } from '@/lib/supabase';
+import { getSupabase, getSupabaseAdmin } from '@/lib/supabase';
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,7 +14,8 @@ export async function POST(req: NextRequest) {
     if (authError) throw authError;
 
     if (authData.user) {
-      const { data: tenant, error: tenantError } = await supabase
+      const adminClient = getSupabaseAdmin();
+      const { data: tenant, error: tenantError } = await adminClient
         .from('tenants')
         .insert({ name: tenant_name || name + "'s Company", plan: 'free', monthly_limit: 100, status: 'active' })
         .select()
@@ -22,7 +23,17 @@ export async function POST(req: NextRequest) {
 
       if (tenantError) throw tenantError;
 
-      await supabase.from('users').insert({ id: authData.user.id, email, full_name: name, tenant_id: tenant.id, role: 'admin' });
+      const { error: userError } = await adminClient
+        .from('users')
+        .insert({ id: authData.user.id, email, full_name: name, tenant_id: tenant.id, role: 'admin' });
+
+      if (userError) throw userError;
+
+      return NextResponse.json({
+        success: true,
+        user: { ...authData.user, tenant_id: tenant.id, role: 'admin', _resolvedRole: 'admin' },
+        session: authData.session
+      });
     }
 
     return NextResponse.json({ success: true, user: authData.user, session: authData.session });

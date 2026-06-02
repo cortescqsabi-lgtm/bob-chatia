@@ -3,17 +3,23 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function GET(req: NextRequest) {
   const tenantId = req.nextUrl.searchParams.get('tenant_id');
   const provider = req.nextUrl.searchParams.get('provider') || 'instagram';
+  const checkOnly = req.nextUrl.searchParams.get('check') === 'true';
+
+  const appId = process.env.META_APP_ID;
+
+  if (!appId) {
+    return NextResponse.json({ error: 'META_APP_ID not configured', configured: false }, { status: 500 });
+  }
+
+  if (checkOnly) {
+    return NextResponse.json({ configured: true });
+  }
 
   if (!tenantId) {
     return NextResponse.json({ error: 'tenant_id is required' }, { status: 400 });
   }
 
-  const appId = process.env.META_APP_ID;
   const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/meta/callback`;
-
-  if (!appId) {
-    return NextResponse.json({ error: 'META_APP_ID not configured' }, { status: 500 });
-  }
 
   const scopes = provider === 'facebook'
     ? 'pages_messaging,pages_show_list,pages_read_engagement'

@@ -4,6 +4,16 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
+function BrandMark() {
+  return (
+    <div className="grid h-8 w-8 grid-cols-3 gap-1 rounded-md bg-black/90 p-1 flex-shrink-0">
+      {Array.from({ length: 9 }).map((_, index) => (
+        <span key={index} className={`${index === 4 ? 'bg-white' : 'bg-lime-300'} rounded-[2px]`} />
+      ))}
+    </div>
+  );
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -21,6 +31,18 @@ export default function LoginPage() {
     });
 
     if (res.ok) {
+      const data = await res.json();
+      if (data.user) {
+        const user = {
+          id: data.user.id,
+          name: data.user.user_metadata?.name || data.user.user_metadata?.full_name || data.user.email,
+          email: data.user.email,
+          role: data.user._resolvedRole || data.user.user_metadata?.role || 'admin',
+          tenant_id: data.user.tenant_id
+        };
+        localStorage.setItem('currentUser', JSON.stringify(user));
+        localStorage.setItem('userRole', user.role);
+      }
       router.push('/dashboard');
     } else {
       const data = await res.json();
@@ -32,8 +54,11 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50">
       <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
         <div className="text-center mb-8">
-          <Link href="/" className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-            MultiChat AI
+          <Link href="/" className="inline-flex items-center justify-center gap-3">
+            <BrandMark />
+            <span className="text-3xl font-black tracking-tight bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+              VendaZap 360
+            </span>
           </Link>
           <p className="text-gray-600 mt-2">Entre na sua conta</p>
         </div>

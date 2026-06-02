@@ -1,64 +1,161 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
+import TrialBlock from '@/components/TrialBlock';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const pathname = usePathname();
+  const router = useRouter();
+  const [role, setRole] = useState<string | null>(null);
+  const [userName, setUserName] = useState('U');
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
-  const menuItems = [
-    { icon: '💬', label: 'Conversas', href: '/dashboard' },
-    { icon: '📊', label: 'Analytics', href: '/dashboard/analytics' },
-    { icon: '🤖', label: 'Config AI', href: '/dashboard/ai-config' },
-    { icon: '⚙️', label: 'Configurações', href: '/dashboard/settings' },
+  useEffect(() => {
+    const storedUser = localStorage.getItem('currentUser');
+    if (!storedUser) {
+      router.replace('/auth/login');
+      return;
+    }
+    const r = localStorage.getItem('userRole') || 'admin';
+    setRole(r);
+    try {
+      const u = JSON.parse(storedUser);
+      if (u?.name) setUserName(u.name.charAt(0).toUpperCase());
+      else if (u?.email) setUserName(u.email.charAt(0).toUpperCase());
+    } catch {}
+    if (r === 'vendedor' && pathname !== '/dashboard') {
+      router.replace('/dashboard');
+    }
+  }, [pathname, router]);
+
+  // Fecha menu do usuário ao clicar fora
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem('currentUser');
+    localStorage.removeItem('userRole');
+    router.push('/auth/login');
+  };
+
+  const allMenuItems = [
+    { label: 'Conversas', href: '/dashboard' },
+    { label: 'Produtos', href: '/dashboard/products' },
+    { label: 'Analytics', href: '/dashboard/analytics' },
+    { label: 'Config AI', href: '/dashboard/ai-config' },
+    { label: 'Configurações', href: '/dashboard/settings' },
+    { label: 'Ajuda', href: '/dashboard/help' },
   ];
 
-  return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* Sidebar */}
-      <aside className={`${sidebarOpen ? 'w-64' : 'w-16'} bg-white border-r transition-all duration-300`}>
-        <div className="p-4 border-b">
-          <Link href="/dashboard" className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-            {sidebarOpen ? 'MultiChat AI' : 'M'}
-          </Link>
-        </div>
-        <nav className="p-2 space-y-1">
-          {menuItems.map((item, index) => (
-            <Link
-              key={index}
-              href={item.href}
-              className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-100 text-gray-700"
-            >
-              <span>{item.icon}</span>
-              {sidebarOpen && <span>{item.label}</span>}
-            </Link>
-          ))}
-        </nav>
-        <div className="p-2 mt-auto border-t">
-          <Link href="/" className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-100 text-gray-500 text-sm">
-            {sidebarOpen ? '← Voltar ao site' : '←'}
-          </Link>
-        </div>
-      </aside>
+  const menuItems = role === 'vendedor'
+    ? [allMenuItems[0], allMenuItems[4]] // Conversas + Ajuda
+    : allMenuItems;
 
-      {/* Main Content */}
-      <div className="flex-1">
-        {/* Top Bar */}
-        <header className="bg-white border-b px-6 py-3 flex justify-between items-center">
-          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-gray-500 hover:text-gray-700">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-600">Plano: Professional</span>
-            <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-semibold">
-              U
-            </div>
+  const currentItem = allMenuItems.find((item) => item.href === pathname) || allMenuItems[0];
+  const isChatPage = pathname === '/dashboard';
+
+  if (role === 'vendedor' && pathname !== '/dashboard' && pathname !== '/dashboard/help') {
+    return null;
+  }
+
+  if (isChatPage) {
+    return <>{children}</>;
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <TrialBlock />
+      <header className="relative z-50 flex h-16 items-center justify-between border-b border-gray-200 bg-white px-4 md:px-6">
+        <div className="flex items-center gap-3">
+          <Link href="/dashboard" className="flex items-center gap-2">
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#0084c7] text-sm font-bold text-white">V</span>
+            <span className="hidden text-base font-bold text-gray-900 sm:inline">VendaZap 360</span>
+          </Link>
+
+          {/* Nav menu dropdown */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setMenuOpen((open) => !open)}
+              className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100"
+            >
+              <span>{currentItem.label}</span>
+              <svg className={`h-4 w-4 transition ${menuOpen ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.17l3.71-3.94a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clipRule="evenodd" />
+              </svg>
+            </button>
+
+            {menuOpen && (
+              <div className="absolute left-0 top-12 w-56 overflow-hidden rounded-lg border border-gray-200 bg-white py-2 shadow-xl">
+                {menuItems.map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setMenuOpen(false)}
+                    className={`block px-4 py-2.5 text-sm font-medium ${
+                      pathname === item.href ? 'bg-blue-50 text-[#0084c7]' : 'text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
-        </header>
-        <main className="p-6">{children}</main>
-      </div>
+        </div>
+
+        {/* Right side: plano + avatar + logout */}
+        <div className="flex items-center gap-3">
+          <span className="hidden text-sm text-gray-600 sm:inline">Plano: Professional</span>
+
+          {/* User avatar + dropdown */}
+          <div className="relative" ref={userMenuRef}>
+            <button
+              type="button"
+              onClick={() => setUserMenuOpen((o) => !o)}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0084c7] text-sm font-semibold text-white hover:bg-[#0070b0] transition"
+              title="Menu do usuário"
+            >
+              {userName}
+            </button>
+
+            {userMenuOpen && (
+              <div className="absolute right-0 top-12 w-48 overflow-hidden rounded-lg border border-gray-200 bg-white py-2 shadow-xl">
+                <Link
+                  href="/dashboard/help"
+                  onClick={() => setUserMenuOpen(false)}
+                  className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  <span>❓</span> Ajuda
+                </Link>
+                <div className="my-1 border-t border-gray-100" />
+                <button
+                  onClick={handleLogout}
+                  className="flex w-full items-center gap-2 px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50 transition"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h6a2 2 0 012 2v1" />
+                  </svg>
+                  Sair da conta
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </header>
+
+      <main className="p-6">{children}</main>
     </div>
   );
 }

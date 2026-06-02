@@ -35,18 +35,22 @@ export async function POST(req: NextRequest) {
     .single();
   if (convErr || !conv) return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
 
+  const dbType = (type === 'audio' || type === 'video') ? 'text' : type;
+  const msgInsert: any = {
+    conversation_id,
+    tenant_id: conv.tenant_id,
+    role: 'assistant',
+    content: media_url || content,
+    type: dbType,
+    media_url: media_url || null,
+    direction: 'outgoing',
+    ai_generated: false,
+    status: 'sent'
+  };
+  if (type !== 'text') msgInsert.metadata = { originalType: type };
   const { data: msg, error: msgErr } = await supabase
     .from('messages')
-    .insert({
-      conversation_id,
-      tenant_id: conv.tenant_id,
-      role: 'assistant',
-      content: media_url || content,
-      type,
-      direction: 'outgoing',
-      ai_generated: false,
-      status: 'sent'
-    })
+    .insert(msgInsert)
     .select()
     .single();
   if (msgErr) return NextResponse.json({ error: msgErr.message }, { status: 500 });
@@ -57,7 +61,7 @@ export async function POST(req: NextRequest) {
   try {
     let evoRes: Response;
     const number = conv.channel_identifier;
-    const instance = 'b2zap';
+    const instance = `instance_${conv.tenant_id}`;
 
     if (type === 'image') {
       evoRes = await fetch(`${evoUrl}/message/sendMedia/${instance}`, {

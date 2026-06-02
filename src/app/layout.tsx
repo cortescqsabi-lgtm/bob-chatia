@@ -5,8 +5,8 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'MultiChat AI - CRM Unificado com Super Agente IA',
-  description: 'Conecte WhatsApp, Instagram e Facebook em um único CRM inteligente com Super Agente IA treinável.',
+  title: 'VendaZap 360 - CRM com vendedor de IA para WhatsApp',
+  description: 'Organize atendimentos em um CRM e coloque um agente de IA para responder, qualificar e vender por WhatsApp.',
 };
 
 export default function RootLayout({

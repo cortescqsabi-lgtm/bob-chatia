@@ -1,5 +1,5 @@
-[project]
-name = "multichat-ai"
+# [project]
+# name = "multichat-ai"
 
 [auth]
 enabled = true

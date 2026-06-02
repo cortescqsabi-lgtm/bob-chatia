@@ -1,16 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { DEFAULT_TENANT_ID } from '@/lib/ai-agent';
 
-const TENANT = '00000000-0000-0000-0000-000000000001';
+function getTenantId(req: Request) {
+  return req.headers.get('x-tenant-id') || DEFAULT_TENANT_ID;
+}
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const supabase = getSupabaseAdmin();
-  const { data } = await supabase.from('tags').select('*').eq('tenant_id', TENANT).order('name');
+  const tenantId = getTenantId(req);
+  const { data } = await supabase.from('tags').select('*').eq('tenant_id', tenantId).order('name');
   return NextResponse.json({ data: data || [] });
 }
 
 export async function POST(req: NextRequest) {
   const supabase = getSupabaseAdmin();
+  const tenantId = getTenantId(req);
   const body = await req.json();
   const { action, name, color, conversation_id, tag_id } = body;
 
@@ -42,7 +47,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (name) {
-    const { data, error } = await supabase.from('tags').insert({ tenant_id: TENANT, name, color: color || '#6366f1' }).select().single();
+    const { data, error } = await supabase.from('tags').insert({ tenant_id: tenantId, name, color: color || '#6366f1' }).select().single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ data });
   }

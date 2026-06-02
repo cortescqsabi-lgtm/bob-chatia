@@ -47,3 +47,8 @@ temp/
 next-env.d.ts
 
 .vercel
+
+# Scripts and tests
+scripts/
+test_*.js
+

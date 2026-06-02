@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { DEFAULT_TENANT_ID } from '@/lib/ai-agent';
 
 export async function GET(req: NextRequest) {
   const supabase = getSupabaseAdmin();
   const { searchParams } = new URL(req.url);
   const search = searchParams.get('search') || '';
+  const tenantId = req.headers.get('x-tenant-id') || searchParams.get('tenant_id') || DEFAULT_TENANT_ID;
 
   let query = supabase
     .from('conversations')
-    .select('contact_name, contact_phone, contact_email, profile_pic_url, channel_type, channel_identifier')
-    .not('contact_phone', 'is', null)
-    .neq('contact_phone', '')
+    .select('contact_name, contact_phone, contact_email, avatar_url, channel_type, channel_identifier')
+    .eq('tenant_id', tenantId)
     .order('contact_name', { ascending: true });
 
   if (search) {
@@ -23,15 +24,16 @@ export async function GET(req: NextRequest) {
   // deduplicate by phone
   const seen = new Set<string>();
   const contacts = (data || []).filter(c => {
-    if (seen.has(c.contact_phone)) return false;
-    seen.add(c.contact_phone);
+    const phone = c.contact_phone || c.channel_identifier;
+    if (!phone || seen.has(phone)) return false;
+    seen.add(phone);
     return true;
   }).map(c => ({
-    id: c.contact_phone,
-    name: c.contact_name || 'Unknown',
-    phone: c.contact_phone,
+    id: c.contact_phone || c.channel_identifier,
+    name: c.contact_name || 'Sem nome',
+    phone: c.contact_phone || c.channel_identifier,
     email: c.contact_email,
-    avatar_url: c.profile_pic_url,
+    avatar_url: c.avatar_url,
     channel_type: c.channel_type,
   }));
 
@@ -43,6 +45,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { name, phone, email, channel_type } = body;
   if (!name || !phone) return NextResponse.json({ error: 'name and phone are required' }, { status: 400 });
+  const tenantId = req.headers.get('x-tenant-id') || body.tenant_id || DEFAULT_TENANT_ID;
 
   // upsert into conversations
   const { data, error } = await supabase.from('conversations').upsert({
@@ -51,7 +54,7 @@ export async function POST(req: NextRequest) {
     contact_name: name,
     contact_phone: phone,
     contact_email: email || null,
-    tenant_id: '00000000-0000-0000-0000-000000000001',
+    tenant_id: tenantId,
     last_message_at: new Date().toISOString(),
     status: 'waiting',
   }, { onConflict: 'channel_identifier', ignoreDuplicates: false }).select().single();
@@ -62,7 +65,7 @@ export async function POST(req: NextRequest) {
     name: data.contact_name,
     phone: data.contact_phone,
     email: data.contact_email,
-    avatar_url: data.profile_pic_url,
+    avatar_url: data.avatar_url,
     channel_type: data.channel_type,
   }}, { status: 201 });
 }
