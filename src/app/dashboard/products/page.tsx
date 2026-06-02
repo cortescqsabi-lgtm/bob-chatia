@@ -13,6 +13,7 @@ interface Product {
   cost_price?: number;
   stock_quantity?: number;
   is_active: boolean;
+  image_url?: string;
 }
 
 /* ─── SVG Icons ─── */
@@ -59,6 +60,7 @@ export default function ProductsPage() {
   const [pPrice, setPPrice] = useState('');
   const [pCost, setPCost] = useState('');
   const [pStock, setPStock] = useState('');
+  const [pImage, setPImage] = useState('');
   const [pActive, setPActive] = useState(true);
 
   // Import State
@@ -121,6 +123,7 @@ export default function ProductsPage() {
       base_price: parseFloat(pPrice.replace(',', '.')) || 0,
       cost_price: pCost ? parseFloat(pCost.replace(',', '.')) : null,
       stock_quantity: pStock ? parseInt(pStock) : 0,
+      image_url: pImage.trim() || null,
       is_active: pActive,
     };
     const method = editProduct ? 'PUT' : 'POST';
@@ -128,7 +131,7 @@ export default function ProductsPage() {
     if (r.ok) {
       setProductModal(false);
       setEditProduct(null);
-      setPName(''); setPSku(''); setPDesc(''); setPCat(''); setPPrice(''); setPCost(''); setPStock(''); setPActive(true);
+      setPName(''); setPSku(''); setPDesc(''); setPCat(''); setPPrice(''); setPCost(''); setPStock(''); setPImage(''); setPActive(true);
       loadProducts(productSearch, productCategory);
     }
   };
@@ -210,7 +213,7 @@ export default function ProductsPage() {
         <button
           onClick={() => {
             setEditProduct(null);
-            setPName(''); setPSku(''); setPDesc(''); setPCat(''); setPPrice(''); setPCost(''); setPStock(''); setPActive(true);
+            setPName(''); setPSku(''); setPDesc(''); setPCat(''); setPPrice(''); setPCost(''); setPStock(''); setPImage(''); setPActive(true);
             setProductModal(true);
           }}
           className="flex items-center gap-2 bg-[#0084c7] text-white px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-[#0070b0] transition shadow-sm"
@@ -366,9 +369,18 @@ export default function ProductsPage() {
                 {products.map((p, idx) => (
                   <tr key={p.id} className={`border-b border-gray-50 last:border-none hover:bg-gray-50/50 transition ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/20'}`}>
                     <td className="px-4 py-3.5">
-                      <p className="font-semibold text-gray-900">{p.name}</p>
-                      <p className="text-xs text-gray-400 font-mono mt-0.5">{p.sku}</p>
-                      {p.description && <p className="text-xs text-gray-500 mt-1 line-clamp-1 max-w-sm">{p.description}</p>}
+                      <div className="flex items-center gap-3">
+                        {p.image_url ? (
+                          <img src={p.image_url} alt={p.name} className="w-10 h-10 object-cover rounded-lg border border-gray-150 flex-shrink-0" />
+                        ) : (
+                          <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400 text-xs font-semibold flex-shrink-0">📦</div>
+                        )}
+                        <div>
+                          <p className="font-semibold text-gray-900">{p.name}</p>
+                          <p className="text-xs text-gray-400 font-mono mt-0.5">{p.sku}</p>
+                          {p.description && <p className="text-xs text-gray-500 mt-1 line-clamp-1 max-w-sm">{p.description}</p>}
+                        </div>
+                      </div>
                     </td>
                     <td className="px-4 py-3.5 hidden sm:table-cell">
                       {p.category ? (
@@ -405,6 +417,7 @@ export default function ProductsPage() {
                             setPCost(p.cost_price != null ? String(p.cost_price) : '');
                             setPStock(p.stock_quantity != null ? String(p.stock_quantity) : '');
                             setPActive(p.is_active);
+                            setPImage(p.image_url || '');
                             setProductModal(true);
                           }}
                           className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-[#0084c7] transition"
@@ -514,6 +527,17 @@ export default function ProductsPage() {
                   rows={3}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#0084c7]/20 resize-none"
                   placeholder="Características, tamanhos disponíveis, detalhes..."
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-500 mb-1 block">Foto / Imagem do Produto (URL)</label>
+                <input
+                  type="text"
+                  value={pImage}
+                  onChange={(e) => setPImage(e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#0084c7]/20"
+                  placeholder="Ex: https://meusite.com.br/fotos/camiseta.jpg"
                 />
               </div>
 

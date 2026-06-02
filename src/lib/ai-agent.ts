@@ -9,9 +9,10 @@ async function getProductsCatalog(tenantId: string): Promise<string> {
     const supabase = getSupabaseAdmin();
     const { data } = await supabase
       .from('products')
-      .select('sku, name, description, category, base_price, stock_quantity, is_active')
+      .select('sku, name, description, category, base_price, stock_quantity, is_active, image_url')
       .eq('tenant_id', tenantId)
       .eq('is_active', true)
+      .gt('stock_quantity', 0) // Exclui produtos sem estoque (estoque zero)
       .order('category', { ascending: true })
       .order('name', { ascending: true })
       .limit(300);
@@ -23,10 +24,11 @@ async function getProductsCatalog(tenantId: string): Promise<string> {
       const stock = p.stock_quantity != null ? `Estoque: ${p.stock_quantity}` : '';
       const cat = p.category ? `[${p.category}] ` : '';
       const desc = p.description ? ` — ${p.description}` : '';
-      return `• ${cat}${p.name} (SKU: ${p.sku}) | Preço: ${price}${stock ? ' | ' + stock : ''}${desc}`;
+      const photo = p.image_url ? ` | Foto/Imagem URL: ${p.image_url}` : '';
+      return `• ${cat}${p.name} (SKU: ${p.sku}) | Preço: ${price}${stock ? ' | ' + stock : ''}${photo}${desc}`;
     });
 
-    return `\n\n=== CATÁLOGO DE PRODUTOS (${data.length} itens) ===\n${lines.join('\n')}\n=== FIM DO CATÁLOGO ===`;
+    return `\n\n=== CATÁLOGO DE PRODUTOS INFORMATIVO (${data.length} itens disponíveis em estoque) ===\n${lines.join('\n')}\n=== FIM DO CATÁLOGO ===`;
   } catch {
     return '';
   }
@@ -43,6 +45,7 @@ Regras:
 - Se o cliente demonstrar interesse, avance para proposta, agendamento ou encaminhamento ao time.
 - Se faltar informação, peça exatamente o dado que falta.
 - Nunca invente preço, prazo, garantia ou condição que não esteja na base de conhecimento.
+- Quando apresentar ou falar sobre um produto que tenha "Foto/Imagem URL" disponível no catálogo, inclua OBRIGATORIAMENTE essa URL exata da foto no final da sua mensagem de forma natural (ex: "Aqui está a foto do produto: [URL_DA_FOTO]"), para que o sistema de mensagens envie a imagem real ao cliente no WhatsApp.
 - Quando perceber lead quente, diga que vai deixar tudo pronto para a equipe finalizar.`;
 
 export async function getAIConfig(tenantId = DEFAULT_TENANT_ID) {
@@ -166,6 +169,30 @@ export async function sendWhatsAppText(number: string, text: string, tenantId?: 
   if (!res.ok) {
     const body = await res.text().catch(() => '');
     throw new Error(`Evolution sendText failed: ${res.status} ${body}`);
+  }
+  return data;
+}
+
+export async function sendWhatsAppMedia(number: string, mediaUrl: string, caption: string, tenantId?: string) {
+  const evoUrl = 'https://b2zap-evolution-api.yagj5r.easypanel.host';
+  const evoKey = process.env.EVOLUTION_API_KEY || '429683C4C977415CAAFCCE10F7D57E11';
+  const instance = tenantId ? `instance_${tenantId}` : 'b2zap';
+
+  const res = await fetch(`${evoUrl}/message/sendMedia/${instance}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
+    body: JSON.stringify({
+      number,
+      mediatype: 'image',
+      media: mediaUrl,
+      caption: caption
+    }),
+  });
+
+  const data = res.ok ? await res.json().catch(() => ({})) : null;
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Evolution sendMedia failed: ${res.status} ${body}`);
   }
   return data;
 }

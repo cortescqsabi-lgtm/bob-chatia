@@ -197,7 +197,7 @@ export default function CrmPage() {
   const previousMsgIdsRef = useRef<Set<string>>(new Set());
 
   // ── Produtos ──────────────────────────────────────────────────────────────
-  interface Product { id: string; sku: string; name: string; description?: string; category?: string; base_price: number; cost_price?: number; stock_quantity?: number; is_active: boolean; }
+  interface Product { id: string; sku: string; name: string; description?: string; category?: string; base_price: number; cost_price?: number; stock_quantity?: number; is_active: boolean; image_url?: string; }
   const [products, setProducts] = useState<Product[]>([]);
   const [productSearch, setProductSearch] = useState('');
   const [productCategory, setProductCategory] = useState('');
@@ -211,6 +211,7 @@ export default function CrmPage() {
   const [pPrice, setPPrice] = useState('');
   const [pCost, setPCost] = useState('');
   const [pStock, setPStock] = useState('');
+  const [pImage, setPImage] = useState('');
   const [pActive, setPActive] = useState(true);
   const [productImporting, setProductImporting] = useState(false);
   const [productImportStatus, setProductImportStatus] = useState('');
@@ -396,13 +397,14 @@ export default function CrmPage() {
       base_price: parseFloat(pPrice.replace(',', '.')) || 0,
       cost_price: pCost ? parseFloat(pCost.replace(',', '.')) : null,
       stock_quantity: pStock ? parseInt(pStock) : 0,
+      image_url: pImage.trim() || null,
       is_active: pActive,
     };
     const method = editProduct ? 'PUT' : 'POST';
     const r = await fetch('/api/products', { method, headers, body: JSON.stringify(body) });
     if (r.ok) {
       setProductModal(false); setEditProduct(null);
-      setPName(''); setPSku(''); setPDesc(''); setPCat(''); setPPrice(''); setPCost(''); setPStock(''); setPActive(true);
+      setPName(''); setPSku(''); setPDesc(''); setPCat(''); setPPrice(''); setPCost(''); setPStock(''); setPImage(''); setPActive(true);
       loadProducts(productSearch, productCategory);
     }
   };
@@ -1557,7 +1559,7 @@ export default function CrmPage() {
                 <h2 className="text-xl font-bold text-gray-900">Catálogo de Produtos</h2>
                 <p className="text-sm text-gray-500 mt-0.5">{products.length} produtos cadastrados • A IA consulta esse catálogo automaticamente</p>
               </div>
-              <button onClick={() => { setEditProduct(null); setPName(''); setPSku(''); setPDesc(''); setPCat(''); setPPrice(''); setPCost(''); setPStock(''); setPActive(true); setProductModal(true); }}
+              <button onClick={() => { setEditProduct(null); setPName(''); setPSku(''); setPDesc(''); setPCat(''); setPPrice(''); setPCost(''); setPStock(''); setPActive(true); setPImage(''); setProductModal(true); }}
                 className="flex items-center gap-2 bg-[#0084c7] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#0070b0] transition">
                 <Icon n="plus" s={16}/> Novo Produto
               </button>
@@ -1661,9 +1663,18 @@ export default function CrmPage() {
                     {products.map((p, i) => (
                       <tr key={p.id} className={`border-t border-gray-50 hover:bg-gray-50/60 transition ${i % 2 === 0 ? '' : 'bg-gray-50/30'}`}>
                         <td className="px-4 py-3">
-                          <p className="font-medium text-gray-900">{p.name}</p>
-                          <p className="text-xs text-gray-400 font-mono">{p.sku}</p>
-                          {p.description && <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{p.description}</p>}
+                          <div className="flex items-center gap-3">
+                            {p.image_url ? (
+                              <img src={p.image_url} alt={p.name} className="w-10 h-10 object-cover rounded-lg border border-gray-150 flex-shrink-0" />
+                            ) : (
+                              <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400 text-xs font-semibold flex-shrink-0">📦</div>
+                            )}
+                            <div>
+                              <p className="font-medium text-gray-900">{p.name}</p>
+                              <p className="text-xs text-gray-400 font-mono">{p.sku}</p>
+                              {p.description && <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{p.description}</p>}
+                            </div>
+                          </div>
                         </td>
                         <td className="px-4 py-3 hidden md:table-cell">
                           {p.category ? <span className="bg-blue-50 text-blue-700 text-xs font-medium px-2 py-0.5 rounded-full">{p.category}</span> : <span className="text-gray-300">—</span>}
@@ -1688,7 +1699,9 @@ export default function CrmPage() {
                               setPPrice(String(p.base_price || ''));
                               setPCost(String(p.cost_price || ''));
                               setPStock(String(p.stock_quantity ?? ''));
-                              setPActive(p.is_active); setProductModal(true);
+                              setPActive(p.is_active);
+                              setPImage(p.image_url || '');
+                              setProductModal(true);
                             }} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-[#0084c7] transition" title="Editar">
                               <Icon n="edit" s={15}/>
                             </button>
@@ -1753,6 +1766,11 @@ export default function CrmPage() {
                     <label className="text-xs font-semibold text-gray-500 mb-1 block">Descrição</label>
                     <textarea value={pDesc} onChange={e => setPDesc(e.target.value)} rows={2}
                       className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#0084c7]/20 resize-none" placeholder="Detalhes, características, tamanhos disponíveis..."/>
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-xs font-semibold text-gray-500 mb-1 block">Foto do Produto (URL)</label>
+                    <input type="text" value={pImage} onChange={e => setPImage(e.target.value)}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#0084c7]/20" placeholder="Ex: https://meusite.com.br/fotos/camiseta.jpg"/>
                   </div>
                   <label className="flex items-center gap-2 cursor-pointer col-span-2">
                     <input type="checkbox" checked={pActive} onChange={e => setPActive(e.target.checked)} className="w-4 h-4 accent-[#0084c7]"/>

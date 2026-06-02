@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { DEFAULT_TENANT_ID, generateAgentReply, getAIConfig, sendWhatsAppText } from '@/lib/ai-agent';
+import { DEFAULT_TENANT_ID, generateAgentReply, getAIConfig, sendWhatsAppText, sendWhatsAppMedia } from '@/lib/ai-agent';
 
 function extractMessageContent(data: any): { text: string; type: string; mediaUrl?: string } {
   if (!data.message) return { text: '', type: 'text' };
@@ -241,13 +241,38 @@ export async function POST(req: NextRequest) {
                   conversationId: conversation.id,
                   message: finalContent,
                 });
-                await sendWhatsAppText(phone, reply.content, conversation.tenant_id);
+
+                // Detecta se a resposta contém alguma URL de imagem
+                const imgRegex = /(https?:\/\/[^\s]+\.(?:png|jpg|jpeg|gif|webp|svg)(?:\?[^\s]+)?)/i;
+                const match = reply.content.match(imgRegex);
+                let sentType = 'text';
+                let sentMediaUrl: string | null = null;
+                let sentContent = reply.content;
+
+                if (match && match[1]) {
+                  const mediaUrl = match[1];
+                  // Remove a URL crua do texto para usar como legenda limpa no WhatsApp
+                  const caption = reply.content.replace(mediaUrl, '').trim();
+                  try {
+                    await sendWhatsAppMedia(phone, mediaUrl, caption, conversation.tenant_id);
+                    sentType = 'image';
+                    sentMediaUrl = mediaUrl;
+                    sentContent = caption || 'Imagem do produto';
+                  } catch (mediaErr) {
+                    console.error('Failed to send media to WhatsApp, falling back to text:', mediaErr);
+                    await sendWhatsAppText(phone, reply.content, conversation.tenant_id);
+                  }
+                } else {
+                  await sendWhatsAppText(phone, reply.content, conversation.tenant_id);
+                }
+
                 const { data: outMsg } = await supabase.from('messages').insert({
                   conversation_id: conversation.id,
                   tenant_id: conversation.tenant_id || DEFAULT_TENANT_ID,
                   role: 'assistant',
-                  content: reply.content,
-                  type: 'text',
+                  content: sentContent,
+                  type: sentType,
+                  media_url: sentMediaUrl,
                   direction: 'outgoing',
                   ai_generated: true,
                   ai_response_time_ms: reply.responseTimeMs,

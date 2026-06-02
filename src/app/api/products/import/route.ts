@@ -49,6 +49,8 @@ const COL_MAP: Record<string, string> = {
   margem: 'margin_percent', margin: 'margin_percent',
   // Status
   ativo: 'is_active', active: 'is_active', status: 'is_active',
+  // Foto / Imagem
+  foto: 'image_url', imagem: 'image_url', image: 'image_url', photo: 'image_url', picture: 'image_url', url_foto: 'image_url', url_imagem: 'image_url',
 };
 
 function normalizeKey(key: string): string {
@@ -119,6 +121,7 @@ export async function POST(req: NextRequest) {
         cost_price: parseMoney(row.cost_price),
         margin_percent: parseMoney(row.margin_percent),
         stock_quantity: parseInt2(row.stock_quantity) ?? 0,
+        image_url: row.image_url ? String(row.image_url).trim() : null,
         is_active: true,
         updated_at: new Date().toISOString(),
       };
